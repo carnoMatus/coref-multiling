@@ -1,0 +1,395 @@
+Log file path: ./data/CorefUD_Czech-PDT/train_mbert_czech/log_Nov13_11-14-26.txt
+Tensorizing examples from ./data/UD/CorefUD-1.0-public/data/CorefUD_Czech-PDT/cs_pdt-corefud-train.512.jsonlines; results will be cached)
+Tensorizing examples from ./data/UD/CorefUD-1.0-public/data/CorefUD_Czech-PDT/cs_pdt-corefud-dev.512.jsonlines; results will be cached)
+ConfigTree([('data_dir', './data/UD/CorefUD-1.0-public/data/CorefUD_Czech-PDT/'), ('language', 'cs_pdt-corefud'), ('from_tf', False), ('filter_singletons', True), ('max_top_antecedents', 50), ('max_training_sentences', 2), ('top_span_ratio', 0.4), ('max_num_extracted_spans', 3900), ('max_num_speakers', 20), ('max_segment_len', 512), ('bert_learning_rate', 1e-05), ('task_learning_rate', 0.0002), ('loss_type', 'marginalized'), ('mention_loss_coef', 0), ('false_new_delta', 1.5), ('adam_eps', 1e-06), ('adam_weight_decay', 0.01), ('warmup_ratio', 0.1), ('max_grad_norm', 1), ('gradient_accumulation_steps', 1), ('coref_depth', 1), ('higher_order', 'attended_antecedent'), ('coarse_to_fine', True), ('fine_grained', True), ('dropout_rate', 0.3), ('ffnn_size', 3000), ('ffnn_depth', 1), ('cluster_ffnn_size', 3000), ('cluster_reduce', 'mean'), ('easy_cluster_first', False), ('cluster_dloss', False), ('num_epochs', 10), ('feature_emb_size', 20), ('max_span_width', 30), ('use_metadata', True), ('use_features', True), ('use_segment_distance', True), ('model_heads', True), ('use_width_prior', True), ('use_distance_prior', True), ('conll_eval_path', './data/UD/slavic/dev.polish.conllu'), ('conll_test_path', './data/CorefUD_Czech-PDT/test.english.v4_gold_conll'), ('genres', ['bc', 'bn', 'mz', 'nw', 'pt', 'tc', 'wb']), ('eval_frequency', 1000), ('report_frequency', 100), ('log_root', './data/CorefUD_Czech-PDT'), ('num_docs', 2532), ('bert_tokenizer_name', 'bert-base-multilingual-cased'), ('bert_pretrained_name_or_path', 'bert-base-multilingual-cased'), ('conll_pred_path', './data/UD/CorefUD-1.0-public/data/CorefUD_Czech-PDT/cs_pdt-corefud-dev.conllu'), ('log_dir', './data/CorefUD_Czech-PDT/train_mbert_czech'), ('tb_dir', './data/CorefUD_Czech-PDT/tensorboard')])
+Model parameters:
+bert.embeddings.word_embeddings.weight: (119547, 768)
+bert.embeddings.position_embeddings.weight: (512, 768)
+bert.embeddings.token_type_embeddings.weight: (2, 768)
+bert.embeddings.LayerNorm.weight: (768,)
+bert.embeddings.LayerNorm.bias: (768,)
+bert.encoder.layer.0.attention.self.query.weight: (768, 768)
+bert.encoder.layer.0.attention.self.query.bias: (768,)
+bert.encoder.layer.0.attention.self.key.weight: (768, 768)
+bert.encoder.layer.0.attention.self.key.bias: (768,)
+bert.encoder.layer.0.attention.self.value.weight: (768, 768)
+bert.encoder.layer.0.attention.self.value.bias: (768,)
+bert.encoder.layer.0.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.0.attention.output.dense.bias: (768,)
+bert.encoder.layer.0.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.0.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.0.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.0.intermediate.dense.bias: (3072,)
+bert.encoder.layer.0.output.dense.weight: (768, 3072)
+bert.encoder.layer.0.output.dense.bias: (768,)
+bert.encoder.layer.0.output.LayerNorm.weight: (768,)
+bert.encoder.layer.0.output.LayerNorm.bias: (768,)
+bert.encoder.layer.1.attention.self.query.weight: (768, 768)
+bert.encoder.layer.1.attention.self.query.bias: (768,)
+bert.encoder.layer.1.attention.self.key.weight: (768, 768)
+bert.encoder.layer.1.attention.self.key.bias: (768,)
+bert.encoder.layer.1.attention.self.value.weight: (768, 768)
+bert.encoder.layer.1.attention.self.value.bias: (768,)
+bert.encoder.layer.1.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.1.attention.output.dense.bias: (768,)
+bert.encoder.layer.1.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.1.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.1.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.1.intermediate.dense.bias: (3072,)
+bert.encoder.layer.1.output.dense.weight: (768, 3072)
+bert.encoder.layer.1.output.dense.bias: (768,)
+bert.encoder.layer.1.output.LayerNorm.weight: (768,)
+bert.encoder.layer.1.output.LayerNorm.bias: (768,)
+bert.encoder.layer.2.attention.self.query.weight: (768, 768)
+bert.encoder.layer.2.attention.self.query.bias: (768,)
+bert.encoder.layer.2.attention.self.key.weight: (768, 768)
+bert.encoder.layer.2.attention.self.key.bias: (768,)
+bert.encoder.layer.2.attention.self.value.weight: (768, 768)
+bert.encoder.layer.2.attention.self.value.bias: (768,)
+bert.encoder.layer.2.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.2.attention.output.dense.bias: (768,)
+bert.encoder.layer.2.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.2.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.2.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.2.intermediate.dense.bias: (3072,)
+bert.encoder.layer.2.output.dense.weight: (768, 3072)
+bert.encoder.layer.2.output.dense.bias: (768,)
+bert.encoder.layer.2.output.LayerNorm.weight: (768,)
+bert.encoder.layer.2.output.LayerNorm.bias: (768,)
+bert.encoder.layer.3.attention.self.query.weight: (768, 768)
+bert.encoder.layer.3.attention.self.query.bias: (768,)
+bert.encoder.layer.3.attention.self.key.weight: (768, 768)
+bert.encoder.layer.3.attention.self.key.bias: (768,)
+bert.encoder.layer.3.attention.self.value.weight: (768, 768)
+bert.encoder.layer.3.attention.self.value.bias: (768,)
+bert.encoder.layer.3.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.3.attention.output.dense.bias: (768,)
+bert.encoder.layer.3.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.3.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.3.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.3.intermediate.dense.bias: (3072,)
+bert.encoder.layer.3.output.dense.weight: (768, 3072)
+bert.encoder.layer.3.output.dense.bias: (768,)
+bert.encoder.layer.3.output.LayerNorm.weight: (768,)
+bert.encoder.layer.3.output.LayerNorm.bias: (768,)
+bert.encoder.layer.4.attention.self.query.weight: (768, 768)
+bert.encoder.layer.4.attention.self.query.bias: (768,)
+bert.encoder.layer.4.attention.self.key.weight: (768, 768)
+bert.encoder.layer.4.attention.self.key.bias: (768,)
+bert.encoder.layer.4.attention.self.value.weight: (768, 768)
+bert.encoder.layer.4.attention.self.value.bias: (768,)
+bert.encoder.layer.4.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.4.attention.output.dense.bias: (768,)
+bert.encoder.layer.4.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.4.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.4.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.4.intermediate.dense.bias: (3072,)
+bert.encoder.layer.4.output.dense.weight: (768, 3072)
+bert.encoder.layer.4.output.dense.bias: (768,)
+bert.encoder.layer.4.output.LayerNorm.weight: (768,)
+bert.encoder.layer.4.output.LayerNorm.bias: (768,)
+bert.encoder.layer.5.attention.self.query.weight: (768, 768)
+bert.encoder.layer.5.attention.self.query.bias: (768,)
+bert.encoder.layer.5.attention.self.key.weight: (768, 768)
+bert.encoder.layer.5.attention.self.key.bias: (768,)
+bert.encoder.layer.5.attention.self.value.weight: (768, 768)
+bert.encoder.layer.5.attention.self.value.bias: (768,)
+bert.encoder.layer.5.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.5.attention.output.dense.bias: (768,)
+bert.encoder.layer.5.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.5.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.5.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.5.intermediate.dense.bias: (3072,)
+bert.encoder.layer.5.output.dense.weight: (768, 3072)
+bert.encoder.layer.5.output.dense.bias: (768,)
+bert.encoder.layer.5.output.LayerNorm.weight: (768,)
+bert.encoder.layer.5.output.LayerNorm.bias: (768,)
+bert.encoder.layer.6.attention.self.query.weight: (768, 768)
+bert.encoder.layer.6.attention.self.query.bias: (768,)
+bert.encoder.layer.6.attention.self.key.weight: (768, 768)
+bert.encoder.layer.6.attention.self.key.bias: (768,)
+bert.encoder.layer.6.attention.self.value.weight: (768, 768)
+bert.encoder.layer.6.attention.self.value.bias: (768,)
+bert.encoder.layer.6.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.6.attention.output.dense.bias: (768,)
+bert.encoder.layer.6.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.6.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.6.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.6.intermediate.dense.bias: (3072,)
+bert.encoder.layer.6.output.dense.weight: (768, 3072)
+bert.encoder.layer.6.output.dense.bias: (768,)
+bert.encoder.layer.6.output.LayerNorm.weight: (768,)
+bert.encoder.layer.6.output.LayerNorm.bias: (768,)
+bert.encoder.layer.7.attention.self.query.weight: (768, 768)
+bert.encoder.layer.7.attention.self.query.bias: (768,)
+bert.encoder.layer.7.attention.self.key.weight: (768, 768)
+bert.encoder.layer.7.attention.self.key.bias: (768,)
+bert.encoder.layer.7.attention.self.value.weight: (768, 768)
+bert.encoder.layer.7.attention.self.value.bias: (768,)
+bert.encoder.layer.7.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.7.attention.output.dense.bias: (768,)
+bert.encoder.layer.7.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.7.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.7.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.7.intermediate.dense.bias: (3072,)
+bert.encoder.layer.7.output.dense.weight: (768, 3072)
+bert.encoder.layer.7.output.dense.bias: (768,)
+bert.encoder.layer.7.output.LayerNorm.weight: (768,)
+bert.encoder.layer.7.output.LayerNorm.bias: (768,)
+bert.encoder.layer.8.attention.self.query.weight: (768, 768)
+bert.encoder.layer.8.attention.self.query.bias: (768,)
+bert.encoder.layer.8.attention.self.key.weight: (768, 768)
+bert.encoder.layer.8.attention.self.key.bias: (768,)
+bert.encoder.layer.8.attention.self.value.weight: (768, 768)
+bert.encoder.layer.8.attention.self.value.bias: (768,)
+bert.encoder.layer.8.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.8.attention.output.dense.bias: (768,)
+bert.encoder.layer.8.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.8.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.8.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.8.intermediate.dense.bias: (3072,)
+bert.encoder.layer.8.output.dense.weight: (768, 3072)
+bert.encoder.layer.8.output.dense.bias: (768,)
+bert.encoder.layer.8.output.LayerNorm.weight: (768,)
+bert.encoder.layer.8.output.LayerNorm.bias: (768,)
+bert.encoder.layer.9.attention.self.query.weight: (768, 768)
+bert.encoder.layer.9.attention.self.query.bias: (768,)
+bert.encoder.layer.9.attention.self.key.weight: (768, 768)
+bert.encoder.layer.9.attention.self.key.bias: (768,)
+bert.encoder.layer.9.attention.self.value.weight: (768, 768)
+bert.encoder.layer.9.attention.self.value.bias: (768,)
+bert.encoder.layer.9.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.9.attention.output.dense.bias: (768,)
+bert.encoder.layer.9.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.9.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.9.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.9.intermediate.dense.bias: (3072,)
+bert.encoder.layer.9.output.dense.weight: (768, 3072)
+bert.encoder.layer.9.output.dense.bias: (768,)
+bert.encoder.layer.9.output.LayerNorm.weight: (768,)
+bert.encoder.layer.9.output.LayerNorm.bias: (768,)
+bert.encoder.layer.10.attention.self.query.weight: (768, 768)
+bert.encoder.layer.10.attention.self.query.bias: (768,)
+bert.encoder.layer.10.attention.self.key.weight: (768, 768)
+bert.encoder.layer.10.attention.self.key.bias: (768,)
+bert.encoder.layer.10.attention.self.value.weight: (768, 768)
+bert.encoder.layer.10.attention.self.value.bias: (768,)
+bert.encoder.layer.10.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.10.attention.output.dense.bias: (768,)
+bert.encoder.layer.10.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.10.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.10.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.10.intermediate.dense.bias: (3072,)
+bert.encoder.layer.10.output.dense.weight: (768, 3072)
+bert.encoder.layer.10.output.dense.bias: (768,)
+bert.encoder.layer.10.output.LayerNorm.weight: (768,)
+bert.encoder.layer.10.output.LayerNorm.bias: (768,)
+bert.encoder.layer.11.attention.self.query.weight: (768, 768)
+bert.encoder.layer.11.attention.self.query.bias: (768,)
+bert.encoder.layer.11.attention.self.key.weight: (768, 768)
+bert.encoder.layer.11.attention.self.key.bias: (768,)
+bert.encoder.layer.11.attention.self.value.weight: (768, 768)
+bert.encoder.layer.11.attention.self.value.bias: (768,)
+bert.encoder.layer.11.attention.output.dense.weight: (768, 768)
+bert.encoder.layer.11.attention.output.dense.bias: (768,)
+bert.encoder.layer.11.attention.output.LayerNorm.weight: (768,)
+bert.encoder.layer.11.attention.output.LayerNorm.bias: (768,)
+bert.encoder.layer.11.intermediate.dense.weight: (3072, 768)
+bert.encoder.layer.11.intermediate.dense.bias: (3072,)
+bert.encoder.layer.11.output.dense.weight: (768, 3072)
+bert.encoder.layer.11.output.dense.bias: (768,)
+bert.encoder.layer.11.output.LayerNorm.weight: (768,)
+bert.encoder.layer.11.output.LayerNorm.bias: (768,)
+bert.pooler.dense.weight: (768, 768)
+bert.pooler.dense.bias: (768,)
+emb_span_width.weight: (30, 20)
+emb_span_width_prior.weight: (30, 20)
+emb_antecedent_distance_prior.weight: (10, 20)
+emb_genre.weight: (7, 20)
+emb_same_speaker.weight: (2, 20)
+emb_segment_distance.weight: (2, 20)
+emb_top_antecedent_distance.weight: (10, 20)
+mention_token_attn.weight: (1, 768)
+mention_token_attn.bias: (1,)
+span_emb_score_ffnn.0.weight: (3000, 2324)
+span_emb_score_ffnn.0.bias: (3000,)
+span_emb_score_ffnn.3.weight: (1, 3000)
+span_emb_score_ffnn.3.bias: (1,)
+span_width_score_ffnn.0.weight: (3000, 20)
+span_width_score_ffnn.0.bias: (3000,)
+span_width_score_ffnn.3.weight: (1, 3000)
+span_width_score_ffnn.3.bias: (1,)
+coarse_bilinear.weight: (2324, 2324)
+coarse_bilinear.bias: (2324,)
+antecedent_distance_score_ffnn.weight: (1, 20)
+antecedent_distance_score_ffnn.bias: (1,)
+coref_score_ffnn.0.weight: (3000, 7052)
+coref_score_ffnn.0.bias: (3000,)
+coref_score_ffnn.3.weight: (1, 3000)
+coref_score_ffnn.3.bias: (1,)
+Tensorboard summary path: ./data/CorefUD_Czech-PDT/tensorboard/train_mbert_czech_Nov13_11-14-26
+*******************Training*******************
+Num samples: 2533
+Num epochs: 10
+Gradient accumulation steps: 1
+Total update steps: 25330
+---------debug step: 0---------
+spans/gold: 64/0; ratio: 0.00
+norm/gold: 3122.6272/0.0000
+---------debug step: 20---------
+spans/gold: 235/9; ratio: 0.04
+norm/gold: 31.5781/0.0000
+---------debug step: 40---------
+spans/gold: 190/6; ratio: 0.03
+norm/gold: 42.0538/0.0000
+---------debug step: 60---------
+spans/gold: 386/14; ratio: 0.04
+norm/gold: 19.0592/-140.8451
+---------debug step: 80---------
+spans/gold: 100/9; ratio: 0.09
+norm/gold: 550.8815/36.3718
+Step 100: avg loss 409.51; steps/sec 1.52
+---------debug step: 100---------
+spans/gold: 16/0; ratio: 0.00
+norm/gold: 0.0000/0.0000
+---------debug step: 120---------
+spans/gold: 292/24; ratio: 0.08
+norm/gold: 26.6696/-135.4870
+---------debug step: 140---------
+spans/gold: 130/0; ratio: 0.00
+norm/gold: 0.0000/0.0000
+---------debug step: 160---------
+spans/gold: 298/34; ratio: 0.11
+norm/gold: 34.3950/-560.4804
+---------debug step: 180---------
+spans/gold: 38/4; ratio: 0.11
+norm/gold: 0.0000/0.0000
+Step 200: avg loss 354.81; steps/sec 1.44
+---------debug step: 200---------
+spans/gold: 4/0; ratio: 0.00
+norm/gold: 0.0000/0.0000
+---------debug step: 220---------
+spans/gold: 114/26; ratio: 0.23
+norm/gold: 1149.2732/154.8142
+---------debug step: 240---------
+spans/gold: 30/2; ratio: 0.07
+norm/gold: 0.0000/0.0000
+---------debug step: 260---------
+spans/gold: 149/22; ratio: 0.15
+norm/gold: 28.5743/-213.7304
+---------debug step: 280---------
+spans/gold: 64/4; ratio: 0.06
+norm/gold: 0.0002/-39.1489
+Step 300: avg loss 320.31; steps/sec 1.56
+---------debug step: 300---------
+spans/gold: 96/13; ratio: 0.14
+norm/gold: 143.9720/-12.9080
+---------debug step: 320---------
+spans/gold: 326/35; ratio: 0.11
+norm/gold: 119.8074/-230.3794
+---------debug step: 340---------
+spans/gold: 228/29; ratio: 0.13
+norm/gold: 124.1537/-74.9640
+---------debug step: 360---------
+spans/gold: 276/44; ratio: 0.16
+norm/gold: 328.0899/-67.9237
+---------debug step: 380---------
+spans/gold: 130/10; ratio: 0.08
+norm/gold: 0.0292/-63.9796
+Step 400: avg loss 266.79; steps/sec 1.50
+---------debug step: 400---------
+spans/gold: 353/58; ratio: 0.16
+norm/gold: 1111.9410/-34.3306
+---------debug step: 420---------
+spans/gold: 13/1; ratio: 0.08
+norm/gold: 0.0003/0.0000
+---------debug step: 440---------
+spans/gold: 22/0; ratio: 0.00
+norm/gold: 0.0000/0.0000
+---------debug step: 460---------
+spans/gold: 124/20; ratio: 0.16
+norm/gold: 25.5414/-32.3164
+---------debug step: 480---------
+spans/gold: 44/12; ratio: 0.27
+norm/gold: 0.0009/-52.1173
+Step 500: avg loss 217.17; steps/sec 1.68
+---------debug step: 500---------
+spans/gold: 310/53; ratio: 0.17
+norm/gold: 10.9486/-178.0089
+---------debug step: 520---------
+spans/gold: 75/18; ratio: 0.24
+norm/gold: 122.9048/-33.7648
+---------debug step: 540---------
+spans/gold: 233/45; ratio: 0.19
+norm/gold: 666.5466/62.2130
+---------debug step: 560---------
+spans/gold: 117/19; ratio: 0.16
+norm/gold: 132.5009/8.5034
+---------debug step: 580---------
+spans/gold: 373/59; ratio: 0.16
+norm/gold: 519.5981/153.3712
+Step 600: avg loss 149.36; steps/sec 1.66
+---------debug step: 600---------
+spans/gold: 123/24; ratio: 0.20
+norm/gold: 6.1811/-84.8259
+---------debug step: 620---------
+spans/gold: 341/79; ratio: 0.23
+norm/gold: 0.2893/-375.5445
+---------debug step: 640---------
+spans/gold: 96/24; ratio: 0.25
+norm/gold: 16.5914/-29.9105
+---------debug step: 660---------
+spans/gold: 243/54; ratio: 0.22
+norm/gold: 87.3823/-28.9804
+---------debug step: 680---------
+spans/gold: 246/41; ratio: 0.17
+norm/gold: 92.6859/-26.3702
+Step 700: avg loss 100.93; steps/sec 1.66
+---------debug step: 700---------
+spans/gold: 260/61; ratio: 0.23
+norm/gold: 186.5860/-28.5251
+---------debug step: 720---------
+spans/gold: 51/5; ratio: 0.10
+norm/gold: 8.9234/-2.2397
+---------debug step: 740---------
+spans/gold: 65/12; ratio: 0.18
+norm/gold: 4.5708/-46.6387
+---------debug step: 760---------
+spans/gold: 152/25; ratio: 0.16
+norm/gold: 46.0920/-3.2308
+---------debug step: 780---------
+spans/gold: 175/25; ratio: 0.14
+norm/gold: 64.3532/-10.1503
+Step 800: avg loss 114.49; steps/sec 1.71
+---------debug step: 800---------
+spans/gold: 16/6; ratio: 0.38
+norm/gold: 1.3622/-5.4098
+---------debug step: 820---------
+spans/gold: 82/10; ratio: 0.12
+norm/gold: 15.1715/9.4932
+---------debug step: 840---------
+spans/gold: 404/77; ratio: 0.19
+norm/gold: 12.6546/-218.9560
+---------debug step: 860---------
+spans/gold: 161/41; ratio: 0.25
+norm/gold: 110.1900/2.1432
+---------debug step: 880---------
+spans/gold: 112/13; ratio: 0.12
+norm/gold: 8.8030/-26.1215
+Step 900: avg loss 100.37; steps/sec 1.51
+---------debug step: 900---------
+spans/gold: 258/52; ratio: 0.20
+norm/gold: 35.9547/-63.3449
+---------debug step: 920---------
+spans/gold: 247/77; ratio: 0.31
+norm/gold: 147.8747/-52.6330
+---------debug step: 940---------
+spans/gold: 34/11; ratio: 0.32
+norm/gold: 1.6829/-32.7077
+---------debug step: 960---------
+spans/gold: 274/59; ratio: 0.22
+norm/gold: 19.9922/-119.6826
+---------debug step: 980---------
+spans/gold: 16/1; ratio: 0.06
+norm/gold: 3.3666/0.0000
+Step 1000: avg loss 77.46; steps/sec 1.77
