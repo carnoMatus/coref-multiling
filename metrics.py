@@ -4,9 +4,8 @@ from __future__ import print_function
 
 import numpy as np
 from collections import Counter
-from sklearn.utils.linear_assignment_ import linear_assignment
 from scipy.optimize import linear_sum_assignment
-
+from scipy.optimize import linear_sum_assignment as linear_assignment
 
 def f1(p_num, p_den, r_num, r_den, beta=1):
     p = 0 if p_den == 0 else p_num / float(p_den)
@@ -121,13 +120,22 @@ def phi4(c1, c2):
 
 def ceafe(clusters, gold_clusters):
     clusters = [c for c in clusters if len(c) != 1]
+
+    if len(clusters) == 0 or len(gold_clusters) == 0:
+        return 0, len(clusters), 0, len(gold_clusters)
+
     scores = np.zeros((len(gold_clusters), len(clusters)))
     for i in range(len(gold_clusters)):
         for j in range(len(clusters)):
             scores[i, j] = phi4(gold_clusters[i], clusters[j])
-    matching = linear_assignment(-scores)
+    row_ind, col_ind = linear_sum_assignment(-scores)
+    matching = np.vstack((row_ind, col_ind)).T
     # matching2 = linear_sum_assignment(-scores)
     # matching2 = np.transpose(np.asarray(matching2))
+
+    if matching.size == 0 or matching.ndim != 2 or matching.shape[1] != 2:
+        return 0, len(clusters), 0, len(gold_clusters)
+
     similarity = sum(scores[matching[:, 0], matching[:, 1]])
     return similarity, len(clusters), similarity, len(gold_clusters)
 
