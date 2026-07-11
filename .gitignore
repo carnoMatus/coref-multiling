@@ -5,3 +5,8 @@ tmp.py
 __pycache__
 data
 results
+.claude
+experiment-runbooks/
+models/
+corefud-scorer/
+.gitignore
