@@ -1,0 +1,23 @@
+21638
+3298
+
+04/18/2026 14:43:03 - INFO - root - The scorer is evaluating coreferential mentions, singletons, zeros (using dependent match method) using head match evaluation setting.
+The following metrics will be evaluated: muc, bcub, ceafe, ceafm, blanc, lea, mor, zero
+
+muc
+Recall: 71.33  Precision: 84.52  F1: 77.37
+bcub
+Recall: 56.69  Precision: 81.19  F1: 66.76
+ceafe
+Recall: 41.63  Precision: 79.06  F1: 54.54
+ceafm
+Recall: 58.47  Precision: 81.56  F1: 68.11
+blanc
+Recall: 55.42  Precision: 82.18  F1: 65.30
+lea
+Recall: 51.53  Precision: 76.61  F1: 61.62
+mor
+Recall: 50.49  Precision: 94.94  F1: 65.92
+zero
+Recall: 89.55  Precision: 90.73  F1: 90.14
+CoNLL score: 66.22
