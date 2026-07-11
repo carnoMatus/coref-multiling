@@ -1,0 +1,22 @@
+WARNING:root:Cluster e93 spans two documents (cmpr9410-049, ln94207-36). It will be split.
+04/22/2026 03:38:17 - INFO - root - Official result with singletons for ./data/train_xlmr_large_czech/Apr21_10-25-07_predictions-best.conllu
+04/22/2026 03:38:17 - INFO - root - The scorer is evaluating coreferential mentions, singletons, zeros (using dependent match method) using head match evaluation setting.
+The following metrics will be evaluated: muc, bcub, ceafe, ceafm, blanc, lea, mor, zero
+
+muc
+Recall: 72.02  Precision: 81.88  F1: 76.63
+bcub
+Recall: 57.75  Precision: 75.93  F1: 65.60
+ceafe
+Recall: 39.06  Precision: 78.85  F1: 52.24
+ceafm
+Recall: 57.09  Precision: 78.66  F1: 66.16
+blanc
+Recall: 55.20  Precision: 77.32  F1: 62.55
+lea
+Recall: 52.27  Precision: 70.91  F1: 60.18
+mor
+Recall: 53.56  Precision: 93.96  F1: 68.23
+zero
+Recall: 80.22  Precision: 89.88  F1: 84.78
+CoNLL score: 64.82

@@ -1,0 +1,31 @@
+many of these
+WARNING:root:Cluster e106 spans two documents (cmpr9410-049, ln94207-36). It will be split.                                                                                                      [3/1875]
+WARNING:root:Cluster e107 spans two documents (cmpr9410-049, ln94207-36). It will be split.                                                                                                              
+WARNING:root:Cluster e110 spans two documents (cmpr9410-049, ln94207-36). It will be split.                                                                                                              
+WARNING:root:Cluster e108 spans two documents (cmpr9410-049, ln94207-36). It will be split.                                                                                                              
+WARNING:root:Cluster e109 spans two documents (cmpr9410-049, ln94207-36). It will be split.
+WARNING:root:Cluster e111 spans two documents (cmpr9410-049, ln94207-36). It will be split.
+WARNING:root:Cluster e113 spans two documents (cmpr9410-049, ln94207-36). It will be split.
+WARNING:root:Cluster e112 spans two documents (cmpr9410-049, ln94207-36). It will be split.
+WARNING:root:Cluster e114 spans two documents (cmpr9410-049, ln94207-36). It will be split.
+04/13/2026 00:56:16 - INFO - root - Official result with singletons for ./data/train_xlmr_base_czech/Apr12_14-21-02_predictions-best.conllu
+04/13/2026 00:56:16 - INFO - root - The scorer is evaluating coreferential mentions, singletons, zeros (using dependent match method) using head match evaluation setting.
+The following metrics will be evaluated: muc, bcub, ceafe, ceafm, blanc, lea, mor, zero
+
+muc
+Recall: 73.60  Precision: 81.43  F1: 77.32
+bcub
+Recall: 59.59  Precision: 76.44  F1: 66.97
+ceafe
+Recall: 42.33  Precision: 79.15  F1: 55.16
+ceafm
+Recall: 59.71  Precision: 78.95  F1: 67.99
+blanc
+Recall: 58.28  Precision: 77.61  F1: 65.47
+lea
+Recall: 53.72  Precision: 71.34  F1: 61.29
+mor
+Recall: 54.90  Precision: 93.80  F1: 69.27
+zero
+Recall: 89.74  Precision: 90.07  F1: 89.91
+CoNLL score: 66.48

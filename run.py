@@ -1,7 +1,13 @@
 import logging
+import os
 import random
 import subprocess
+import sys
 import tempfile
+
+# Must be set before torch is imported so CUDA initializes only the requested device
+if len(sys.argv) > 2 and sys.argv[2].lstrip('-').isdigit():
+    os.environ['CUDA_VISIBLE_DEVICES'] = sys.argv[2]
 
 import numpy as np
 import torch
@@ -19,7 +25,6 @@ from datetime import datetime
 from torch.optim.lr_scheduler import LambdaLR
 from model import CorefModel
 import conll
-import sys
 import tensorflow as tf
 tf.config.set_visible_devices([], 'GPU')
 
@@ -73,7 +78,7 @@ class Runner:
             util.set_seed(seed)
 
         # Set up device
-        self.device = torch.device('cpu' if gpu_id is None else f'cuda:{gpu_id}')
+        self.device = torch.device('cpu' if gpu_id is None else 'cuda:0')
 
         # Set up data
         self.data = CorefDataProcessor(self.config, language=self.config.language)
@@ -341,8 +346,6 @@ class Runner:
         # return LambdaLR(optimizer, [lr_lambda_bert, lr_lambda_bert, lr_lambda_task, lr_lambda_task])
 
     def save_model_checkpoint(self, model, step):
-        if step < 30000:
-            return  # Debug
         path_ckpt = join(self.config['log_dir'], f'model_{self.name_suffix}_{step}.bin')
         torch.save(model.state_dict(), path_ckpt)
         logger.info('Saved model to %s' % path_ckpt)

@@ -1,0 +1,20 @@
+21638
+3298
+
+muc
+Recall: 48.92  Precision: 69.60  F1: 57.45
+bcub
+Recall: 36.96  Precision: 62.39  F1: 46.42
+ceafe
+Recall: 25.18  Precision: 68.11  F1: 36.77
+ceafm
+Recall: 38.26  Precision: 67.17  F1: 48.75
+blanc
+Recall: 31.69  Precision: 62.53  F1: 38.64
+lea
+Recall: 30.97  Precision: 54.94  F1: 39.61
+mor
+Recall: 36.67  Precision: 91.33  F1: 52.33
+zero
+Recall: 69.89  Precision: 76.42  F1: 73.01
+CoNLL score: 46.88

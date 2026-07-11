@@ -1,0 +1,25 @@
+21638
+3298
+
+04/21/2026 04:23:56 - INFO - root - The scorer is evaluating coreferential mentions, singletons, zeros (using dependent match method) using head match e[0/1866]
+n setting.                                                                                                                                                      
+The following metrics will be evaluated: muc, bcub, ceafe, ceafm, blanc, lea, mor, zero                                                                         
+                                                                                
+muc                                                                             
+Recall: 68.61  Precision: 83.07  F1: 75.15                                      
+bcub                                                                            
+Recall: 54.11  Precision: 78.77  F1: 64.15                                      
+ceafe                                                                           
+Recall: 40.30  Precision: 77.71  F1: 53.08                                      
+ceafm                                                                           
+Recall: 55.99  Precision: 79.64  F1: 65.75                                      
+blanc                                                                           
+Recall: 52.56  Precision: 78.90  F1: 61.82                                      
+lea                                                                             
+Recall: 48.58  Precision: 73.77  F1: 58.58                                                                                                                      
+mor                                                                             
+Recall: 54.59  Precision: 94.26  F1: 69.14                                                                                                                      
+zero                                                                                                                                                            
+Recall: 85.84  Precision: 88.16  F1: 86.98
+CoNLL score: 64.13
+                               
