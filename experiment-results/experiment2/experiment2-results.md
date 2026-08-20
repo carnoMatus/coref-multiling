@@ -17,7 +17,7 @@ of Experiment 1's results to avoid confounding the comparison
 | A: `train_exp2_czech_pdt` | cs_pdt only | 2533 | 72.53 | 65.54 | 64.58 | **67.55** |
 | B: `train_exp2_czech_all` | cs_pdt + cs_pcedt + cs_pdtsc | 5679 | 73.35 | 66.71 | 65.45 | **68.51** |
 | C: `train_exp2_slavic` | all Czech + pl_pcc + ru_rucor | 7287 | 73.43 | 66.57 | 65.68 | **68.56** |
-| D: `train_exp2_zerosshot` | pl_pcc + ru_rucor only (no Czech) | 1608 | 55.55 | 46.54 | 46.61 | **49.57** |
+| D: `train_exp2_zerosshot` | pl_pcc + ru_rucor only (no Czech) | 1608 | 54.74 | 45.45 | 46.44 | **48.88** |
 | E: `train_exp2_multilingual` | all CorefUD 1.4 (incl. Czech) | 12918 | 73.79 | 67.13 | 66.03 | **68.99** |
 | F: `train_exp2_multilingual_zerosshot` | all CorefUD 1.4 except Czech | 7239 | 59.69 | 51.75 | 52.76 | **54.73** |
 
@@ -28,7 +28,8 @@ data version (CorefUD 1.0 vs 1.4). Condition A is the correct intra-experiment b
 
 ## Notes on Reruns
 
-Two conditions were trained more than once; the later, better-converged run is reported.
+Two conditions were trained more than once; the later, better-converged run is reported,
+except `train_exp2_zerosshot`'s run 3 (see below).
 
 ### `train_exp2_czech_all`
 
@@ -42,10 +43,14 @@ Two conditions were trained more than once; the later, better-converged run is r
 | Run | Date | CoNLL |
 |-----|------|-------|
 | 1 | Aug10 | 48.81 |
-| 2 | Aug16 | **49.57** (reported) |
+| 2 | Aug16 | 49.57 |
+| 3 | Aug20 | **48.88** (reported) |
 
-Both gaps are small (~0.1–0.8 points) and consistent with normal run-to-run noise; no
-instability like Czert-B in Experiment 1 was observed.
+Run 3 was not a re-run for better convergence — run 2's best checkpoint (step 39000) was
+deleted by training's checkpoint rotation before it could be archived to `models/experiment2/`.
+Run 3 regenerates a checkpoint for that archive; its score (48.88) is what's reported here,
+superseding run 2's 49.57. All three scores sit within ~0.8 points of each other, consistent
+with normal run-to-run noise; no instability like Czert-B in Experiment 1 was observed.
 
 ---
 
@@ -61,16 +66,16 @@ volume matters far more than related-language data volume.
 
 ### 2. Zero-shot cross-lingual transfer is real but weak without any Czech
 
-Condition D (Polish + Russian only, no Czech) reaches 49.57 CoNLL — well above a
+Condition D (Polish + Russian only, no Czech) reaches 48.88 CoNLL — well above a
 random/degenerate baseline, showing mBERT's shared multilingual representations transfer
 some coreference-relevant structure across Slavic languages. But it trails the weakest
-Czech-inclusive condition (A, 67.55) by 18 points. Related-language pretraining data is not
+Czech-inclusive condition (A, 67.55) by nearly 19 points. Related-language pretraining data is not
 a substitute for target-language supervision.
 
 ### 3. Broad multilingual exposure beats narrow relatedness for zero-shot transfer (D vs F)
 
 Condition F (all 28 CorefUD languages except Czech, 7239 docs) scores 54.73, clearly above
-condition D (Slavic-only, 1608 docs, 49.57) — a +5.16 gain. This answers the question posed
+condition D (Slavic-only, 1608 docs, 48.88) — a +5.85 gain. This answers the question posed
 in the experiment design: breadth of multilingual exposure outweighs linguistic relatedness
 under zero-shot conditions, at least at this data scale. It's possible this is partly a data-volume
 effect (7239 vs 1608 docs) rather than purely a breadth effect, since the two are confounded here.
@@ -86,7 +91,7 @@ in-language gains from B.
 ### 5. Zero anaphora tracks full coreference, but transfers even less well zero-shot
 
 Zero anaphora F1 follows the same ordering as CoNLL F1 across conditions (E: 86.27 > C: 85.54
-> B: 85.14 > A: 83.52 among Czech-inclusive runs; F: 70.50 > D: 68.63 among zero-shot runs).
+> B: 85.14 > A: 83.52 among Czech-inclusive runs; F: 70.50 > D: 68.36 among zero-shot runs).
 The gap between Czech-inclusive and zero-shot conditions is proportionally similar to CoNLL
 (roughly 15–18 points), suggesting zero anaphora resolution — which is more syntax-dependent
 and Czech-specific in its overt cues — is not disproportionately harder to transfer than
@@ -94,10 +99,13 @@ general coreference.
 
 ### 6. Precision consistently exceeds recall, as in Experiment 1
 
-All six conditions show MUC precision 13–24 points above recall, most pronounced in the
-zero-shot conditions (D: 69.02 vs 46.48; F: 70.72 vs 51.64). Without Czech training signal,
-the model becomes markedly more conservative, missing far more genuine coreference links
-while keeping the links it does propose fairly accurate.
+All six conditions show MUC precision above recall, most pronounced in the zero-shot
+conditions — D now shows the largest gap of all six by a wide margin (71.61 vs 44.31, a
+27-point spread), with F next (70.72 vs 51.64, 19 points); the four Czech-inclusive conditions
+sit in a tighter 15–15.2 point band. Without Czech training signal, the model becomes markedly
+more conservative, missing far more genuine coreference links while keeping the links it does
+propose fairly accurate — and condition D's rerun sharpens that pattern further versus the
+previously reported run.
 
 ---
 
