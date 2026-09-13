@@ -207,6 +207,11 @@ class Runner:
 
         model.eval()
         max_sentences = self.config["max_training_sentences"] if "max_pred_sentences" not in self.config else self.config["max_pred_sentences"]
+
+        # Experiment 3 (mention candidate strategy) extra logging
+        log_mention_recall = self.config.get("log_mention_recall_diagnostics", False)
+        total_gold_mentions, candidate_stage_hits, pruned_stage_hits = 0, 0, 0
+
         for i, (doc_key, tensor_example) in enumerate(tensor_examples):
             gold_clusters = stored_info['gold'][doc_key]
             tensor_example = tensor_example[:7]  # Strip out gold
@@ -217,15 +222,19 @@ class Runner:
                 batch_examples = Tensorizer(self.config).split_example(*tensor_example)
             predicted_clusters = []
             mention_to_cluster_id = {}
+            candidate_span_pairs, pruned_span_pairs = set(), set()
             for j, example in enumerate(batch_examples):
                 example_gpu = [d.to(self.device) for d in example]
                 with torch.no_grad():
-                    _, _, _, span_starts, span_ends, antecedent_idx, antecedent_scores = model(*example_gpu)
+                    candidate_starts, candidate_ends, _, span_starts, span_ends, antecedent_idx, antecedent_scores = model(*example_gpu)
                     sentence_len = tensor_example[3]
                     offset = j * max_sentences
                     word_offset = sentence_len[:offset].sum()
                     span_starts = span_starts + word_offset
                     span_ends = span_ends + word_offset
+                    if log_mention_recall:
+                        candidate_span_pairs.update(zip((candidate_starts + word_offset).tolist(), (candidate_ends + word_offset).tolist()))
+                        pruned_span_pairs.update(zip(span_starts.tolist(), span_ends.tolist()))
                 example_gpu = [e.detach().cpu() for e in example_gpu]
                 span_starts, span_ends = span_starts.tolist(), span_ends.tolist()
                 antecedent_idx, antecedent_scores = antecedent_idx.tolist(), antecedent_scores.tolist()
@@ -236,6 +245,18 @@ class Runner:
             if self.config["filter_singletons"]:
                 predicted_clusters = util.discard_singletons(predicted_clusters)
             doc_to_prediction[doc_key] = predicted_clusters
+
+            if log_mention_recall:
+                gold_mention_pairs = set(tuple(m) for m in util.flatten(gold_clusters))
+                total_gold_mentions += len(gold_mention_pairs)
+                candidate_stage_hits += len(gold_mention_pairs & candidate_span_pairs)
+                pruned_stage_hits += len(gold_mention_pairs & pruned_span_pairs)
+
+        if log_mention_recall and total_gold_mentions > 0:
+            logger.info('Mention recall diagnostics -- candidate stage (width-capped, pre-pruning): %.2f%% (%d/%d)' %
+                        (100 * candidate_stage_hits / total_gold_mentions, candidate_stage_hits, total_gold_mentions))
+            logger.info('Mention recall diagnostics -- post-pruning stage: %.2f%% (%d/%d)' %
+                        (100 * pruned_stage_hits / total_gold_mentions, pruned_stage_hits, total_gold_mentions))
 
         p, r, f = evaluator.get_prf()
         metrics = {'Eval_Avg_Precision': p * 100, 'Eval_Avg_Recall': r * 100, 'Eval_Avg_F1': f * 100}
