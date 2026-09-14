@@ -211,6 +211,7 @@ class Runner:
         # Experiment 3 (mention candidate strategy) extra logging
         log_mention_recall = self.config.get("log_mention_recall_diagnostics", False)
         total_gold_mentions, candidate_stage_hits, pruned_stage_hits = 0, 0, 0
+        total_candidate_spans, total_pruned_spans = 0, 0
 
         for i, (doc_key, tensor_example) in enumerate(tensor_examples):
             gold_clusters = stored_info['gold'][doc_key]
@@ -251,12 +252,20 @@ class Runner:
                 total_gold_mentions += len(gold_mention_pairs)
                 candidate_stage_hits += len(gold_mention_pairs & candidate_span_pairs)
                 pruned_stage_hits += len(gold_mention_pairs & pruned_span_pairs)
+                total_candidate_spans += len(candidate_span_pairs)
+                total_pruned_spans += len(pruned_span_pairs)
 
         if log_mention_recall and total_gold_mentions > 0:
             logger.info('Mention recall diagnostics -- candidate stage (width-capped, pre-pruning): %.2f%% (%d/%d)' %
                         (100 * candidate_stage_hits / total_gold_mentions, candidate_stage_hits, total_gold_mentions))
             logger.info('Mention recall diagnostics -- post-pruning stage: %.2f%% (%d/%d)' %
                         (100 * pruned_stage_hits / total_gold_mentions, pruned_stage_hits, total_gold_mentions))
+            if total_candidate_spans > 0:
+                logger.info('Mention precision diagnostics -- candidate stage (width-capped, pre-pruning): %.2f%% (%d/%d)' %
+                            (100 * candidate_stage_hits / total_candidate_spans, candidate_stage_hits, total_candidate_spans))
+            if total_pruned_spans > 0:
+                logger.info('Mention precision diagnostics -- post-pruning stage: %.2f%% (%d/%d)' %
+                            (100 * pruned_stage_hits / total_pruned_spans, pruned_stage_hits, total_pruned_spans))
 
         p, r, f = evaluator.get_prf()
         metrics = {'Eval_Avg_Precision': p * 100, 'Eval_Avg_Recall': r * 100, 'Eval_Avg_F1': f * 100}
