@@ -1,0 +1,10 @@
+## Results Table
+
+| Model | Family | Vocab | MUC F1 | B³ F1 | CEAFe F1 | **CoNLL** |
+|-------|--------|-------|--------|-------|---------|-----------|
+| mBERT | BERT multilingual (104 lang) | 119k | 72.49 | 65.36 | 64.34 | **67.40** |
+| SlavicBERT | BERT multilingual (4 Slavic) | — | 73.89 | 67.16 | 66.40 | **69.15** |
+| XLM-R Large ¹ | RoBERTa multilingual (100 lang) | 250k | 76.16 | 69.19 | 67.97 | **71.11** |
+| XLM-R Base | RoBERTa multilingual (100 lang) | 250k | 76.37 | 69.66 | 68.51 | **71.51** |
+| RobeCzech | RoBERTa Czech-only | 52k | 75.46 | 68.86 | 67.26 | **70.53** |
+| Czert-B ² | BERT Czech-only | 30k | 55.26 | 46.62 | 45.43 | **49.10** |
