@@ -118,8 +118,12 @@ class CorefModel(nn.Module):
             assert gold_ends is not None
             do_loss = True
 
-        # Get token emb
-        mention_doc, _ = self.bert(input_ids, attention_mask=input_mask)  # [num seg, num max tokens, emb size]
+        # experiment 3 context param
+        context_window = conf.get('context_window_subtokens', 0)
+        if context_window and context_window > 0:
+            mention_doc = self._encode_with_context_window(input_ids, input_mask, sentence_len, context_window)
+        else:
+            mention_doc, _ = self.bert(input_ids, attention_mask=input_mask)  # [num seg, num max tokens, emb size]
         input_mask = input_mask.to(torch.bool)
         mention_doc = mention_doc[input_mask]
         speaker_ids = speaker_ids[input_mask]
@@ -333,6 +337,76 @@ class CorefModel(nn.Module):
         self.update_steps += 1
 
         return [candidate_starts, candidate_ends, candidate_mention_scores, top_span_starts, top_span_ends, top_antecedent_idx, top_antecedent_scores], loss
+
+    def _encode_with_context_window(self, input_ids, input_mask, sentence_len, context_window):
+        """ Encode each segment together with up to `context_window` extra subtokens borrowed
+        from the immediately preceding/following segment, then slice the output back down to
+        exactly the original per-segment token layout (same shape/order as a plain
+        self.bert(input_ids) call).
+
+        This only widens what the encoder attends to; it never changes sentence_map,
+        subtoken_map, gold-span indices, or candidate-span indices, all of which are computed
+        from the original non-overlapping segments elsewhere in preprocess.py/tensorize.py. A
+        document's first/last segment simply gets less (or no) context on the missing side.
+
+        CLS/SEP representations are recomputed from the extended window rather than kept
+        identical to the context_window=0 case; this is harmless downstream because CLS/SEP
+        never coincide with a gold mention span.
+        """
+        assert context_window > 0
+        device = self.device
+        num_segs, max_seg_len = input_ids.shape
+        sentence_len_list = sentence_len.tolist()
+        cls_id = input_ids[0, 0].item()
+
+        ext_input_ids, offsets, content_lens, unpadded_lens = [], [], [], []
+        max_ext_len = 0
+        for i in range(num_segs):
+            seg_len = sentence_len_list[i]
+            sep_id = input_ids[i, seg_len - 1].item()
+            content = input_ids[i, 1:seg_len - 1].tolist()  # excludes CLS/SEP
+
+            left_ctx = []
+            if i > 0:
+                prev_len = sentence_len_list[i - 1]
+                prev_content = input_ids[i - 1, 1:prev_len - 1].tolist()
+                left_ctx = prev_content[-context_window:]
+
+            right_ctx = []
+            if i < num_segs - 1:
+                next_len = sentence_len_list[i + 1]
+                next_content = input_ids[i + 1, 1:next_len - 1].tolist()
+                right_ctx = next_content[:context_window]
+
+            seg_ext = [cls_id] + left_ctx + content + right_ctx + [sep_id]
+            ext_input_ids.append(seg_ext)
+            offsets.append(1 + len(left_ctx))
+            content_lens.append(len(content))
+            unpadded_lens.append(len(seg_ext))
+            max_ext_len = max(max_ext_len, len(seg_ext))
+
+        ext_input_mask = []
+        for i in range(num_segs):
+            pad = max_ext_len - len(ext_input_ids[i])
+            ext_input_mask.append([1] * len(ext_input_ids[i]) + [0] * pad)
+            ext_input_ids[i] = ext_input_ids[i] + [0] * pad
+
+        ext_input_ids_t = torch.tensor(ext_input_ids, dtype=torch.long, device=device)
+        ext_input_mask_t = torch.tensor(ext_input_mask, dtype=torch.long, device=device)
+
+        ext_hidden, _ = self.bert(ext_input_ids_t, attention_mask=ext_input_mask_t)  # [num seg, max ext len, hidden]
+
+        hidden_size = ext_hidden.shape[-1]
+        mention_doc = torch.zeros(num_segs, max_seg_len, hidden_size, device=device)
+        for i in range(num_segs):
+            seg_len = sentence_len_list[i]
+            offset, content_len = offsets[i], content_lens[i]
+            sep_pos = unpadded_lens[i] - 1
+            mention_doc[i, 0, :] = ext_hidden[i, 0, :]  # CLS
+            if content_len > 0:
+                mention_doc[i, 1:1 + content_len, :] = ext_hidden[i, offset:offset + content_len, :]
+            mention_doc[i, seg_len - 1, :] = ext_hidden[i, sep_pos, :]  # SEP
+        return mention_doc
 
     def _extract_top_spans(self, candidate_idx_sorted, candidate_starts, candidate_ends, num_top_spans):
         """ Keep top non-cross-overlapping candidates ordered by scores; compute on CPU because of loop """
