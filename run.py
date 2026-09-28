@@ -1,3 +1,4 @@
+import collections
 import logging
 import os
 import random
@@ -16,6 +17,7 @@ from transformers import AdamW
 from torch.optim import Adam, SGD
 
 import udapi_io
+import ling_features
 from tensorize import CorefDataProcessor, Tensorizer
 import util
 import time
@@ -213,21 +215,31 @@ class Runner:
         total_gold_mentions, candidate_stage_hits, pruned_stage_hits = 0, 0, 0
         total_candidate_spans, total_pruned_spans = 0, 0
 
+        # Experiment 5 (linguistic features) head-ambiguity logging
+        log_head_ambiguity = self.config.get("log_head_ambiguity", False)
+        head_stats = collections.Counter()
+
         for i, (doc_key, tensor_example) in enumerate(tensor_examples):
             gold_clusters = stored_info['gold'][doc_key]
+            ling = tensor_example[10] if len(tensor_example) > 10 else None  # Experiment 5
             tensor_example = tensor_example[:7]  # Strip out gold
             num_sentences = tensor_example[0].shape[0]
             if num_sentences <= max_sentences:
-                batch_examples = [tensor_example]
+                batch_examples = [tensor_example if ling is None else tensor_example + (ling,)]
             else:
-                batch_examples = Tensorizer(self.config).split_example(*tensor_example)
+                batch_examples = Tensorizer(self.config).split_example(*tensor_example, ling=ling)
+            if log_head_ambiguity:
+                self._count_gold_head_ambiguity(ling, gold_clusters, head_stats)
             predicted_clusters = []
             mention_to_cluster_id = {}
             candidate_span_pairs, pruned_span_pairs = set(), set()
             for j, example in enumerate(batch_examples):
                 example_gpu = [d.to(self.device) for d in example]
+                ling_gpu = example_gpu[7] if len(example_gpu) > 7 else None
                 with torch.no_grad():
-                    candidate_starts, candidate_ends, _, span_starts, span_ends, antecedent_idx, antecedent_scores = model(*example_gpu)
+                    candidate_starts, candidate_ends, _, span_starts, span_ends, antecedent_idx, antecedent_scores = model(*example_gpu[:7], ling=ling_gpu)
+                    if log_head_ambiguity:
+                        head_stats.update(model.head_ambiguity_stats)
                     sentence_len = tensor_example[3]
                     offset = j * max_sentences
                     word_offset = sentence_len[:offset].sum()
@@ -267,6 +279,13 @@ class Runner:
                 logger.info('Mention precision diagnostics -- post-pruning stage: %.2f%% (%d/%d)' %
                             (100 * pruned_stage_hits / total_pruned_spans, pruned_stage_hits, total_pruned_spans))
 
+        if log_head_ambiguity:
+            for level, label in [('candidates', 'candidates'), ('top_spans', 'top spans'), ('gold', 'gold mentions')]:
+                total = head_stats[level]
+                logger.info('Head ambiguity -- %s: %.2f%% (%d/%d); ambiguous with differing tags: %d' %
+                            (label, 100 * head_stats[level + '_ambiguous'] / max(total, 1), head_stats[level + '_ambiguous'],
+                             total, head_stats[level + '_differing']))
+
         p, r, f = evaluator.get_prf()
         metrics = {'Eval_Avg_Precision': p * 100, 'Eval_Avg_Recall': r * 100, 'Eval_Avg_F1': f * 100}
         for name, score in metrics.items():
@@ -291,16 +310,31 @@ class Runner:
 
         return f * 100, metrics
 
+    def _count_gold_head_ambiguity(self, ling, gold_clusters, head_stats):
+        """ Experiment 5: head ambiguity of gold mentions, on the full-document ling tensor """
+        max_width = self.config['max_span_width']
+        spans = [tuple(m) for m in util.flatten(gold_clusters) if m[1] - m[0] < max_width]
+        if not spans:
+            return
+        starts = torch.tensor([s for s, _ in spans], dtype=torch.long)
+        ends = torch.tensor([e for _, e in spans], dtype=torch.long)
+        head_pos, _, num_qual, qualifies = ling_features.find_span_heads(ling, starts, ends, max_width)
+        ambiguous = num_qual > 1
+        head_stats['gold'] += len(spans)
+        head_stats['gold_ambiguous'] += ambiguous.sum().item()
+        head_stats['gold_differing'] += (ling_features.ambiguous_with_different_tags(ling, starts, qualifies, head_pos) & ambiguous).sum().item()
+
     def predict(self, model, tensor_examples):
         logger.info('Predicting %d samples...' % len(tensor_examples))
         model.to(self.device)
         predicted_spans, predicted_antecedents, predicted_clusters = [], [], []
 
         for i, tensor_example in enumerate(tensor_examples):
+            ling = tensor_example[10].to(self.device) if len(tensor_example) > 10 else None  # Experiment 5
             tensor_example = tensor_example[:7]
             example_gpu = [d.to(self.device) for d in tensor_example]
             with torch.no_grad():
-                _, _, _, span_starts, span_ends, antecedent_idx, antecedent_scores = model(*example_gpu)
+                _, _, _, span_starts, span_ends, antecedent_idx, antecedent_scores = model(*example_gpu, ling=ling)
             span_starts, span_ends = span_starts.tolist(), span_ends.tolist()
             antecedent_idx, antecedent_scores = antecedent_idx.tolist(), antecedent_scores.tolist()
             clusters, mention_to_cluster_id, antecedents = model.get_predicted_clusters(span_starts, span_ends, antecedent_idx, antecedent_scores)

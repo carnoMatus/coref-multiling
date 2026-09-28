@@ -1,0 +1,9 @@
+== pos (data/train_exp5_pos/model_Sep25_09-41-14_109000.bin)
+   column norms (init ~1.10): span-emb mean 2.34, new features mean 4.43
+   linearised effect on mention score: DET +12.2, PRON +10.3, ADJ +3.9, NOUN +2.1, PROPN +0.5, ADV -0.4, NUM -1.6, SYM -3.1, X -3.8, INTJ -6.4, PUNCT -9.8, VERB -12.1, CCONJ -20.0, PART -20.5, SCONJ -28.2, AUX -31.8, ADP -41.2
+== morph (data/train_exp5_morph/model_Sep25_18-26-08_110000.bin)
+   column norms (init ~1.10): span-emb mean 2.35, new features mean 3.27
+   linearised effect on mention score: Case=Nom +8.9, Person=3 +8.6, Case=Gen +6.0, Number=Sing +5.4, Case=Voc +5.3, Case=Acc +4.9, Person=2 +4.7, Case=Dat +4.2, Person=1 +4.0, Number=Plur +3.5, Gender=Masc +3.2, Gender=Neut +3.1, Gender=Fem +3.0, Case=Loc +0.1, Case=Ins -1.7, Number=Dual -3.9
+== combined (data/train_exp5_combined/model_Sep26_03-30-26_102000.bin)
+   column norms (init ~1.10): span-emb mean 2.32, new features mean 3.57
+   linearised effect on mention score: DET +11.0, PRON +10.9, Person=3 +6.7, Case=Nom +5.8, Number=Sing +4.5, Person=2 +4.0, ADV +3.4, Case=Gen +3.3, Person=1 +3.1, Case=Voc +3.1, Number=Plur +3.1, ADJ +3.0, Gender=Fem +2.4, Case=Dat +2.2, Gender=Masc +2.0, NOUN +1.8, Gender=Neut +1.7, Case=Acc +1.3, X +0.5, PROPN +0.4, NUM -0.2, Case=Loc -1.7, SYM -2.3, Number=Dual -3.6, Case=Ins -4.5, INTJ -5.1, PUNCT -7.8, VERB -12.5, PART -17.5, CCONJ -17.7, SCONJ -25.0, AUX -31.4, ADP -38.3
