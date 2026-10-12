@@ -22,7 +22,7 @@ import time
 from os.path import join
 from metrics import CorefEvaluator
 from datetime import datetime
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from model import CorefModel
 import conll
 import tensorflow as tf
@@ -153,7 +153,7 @@ class Runner:
                     for optimizer in optimizers:
                         optimizer.step()
                     model.zero_grad()
-                    for scheduler in schedulers:
+                    for scheduler in schedulers['per_step']:
                         scheduler.step()
 
                     # Compute effective loss
@@ -173,12 +173,17 @@ class Runner:
                         start_time = end_time
 
                         tb_writer.add_scalar('Training_Loss', avg_loss, len(loss_history))
-                        tb_writer.add_scalar('Learning_Rate_Bert', schedulers[0].get_last_lr()[0], len(loss_history))
-                        tb_writer.add_scalar('Learning_Rate_Task', schedulers[1].get_last_lr()[-1], len(loss_history))
+                        tb_writer.add_scalar('Learning_Rate_Bert', optimizers[0].param_groups[0]['lr'], len(loss_history))
+                        tb_writer.add_scalar('Learning_Rate_Task', optimizers[1].param_groups[-1]['lr'], len(loss_history))
                     example_gpu = [e.detach().cpu() for e in example_gpu]
                     # Evaluate
                     if len(loss_history) > 0 and len(loss_history) % conf['eval_frequency'] == 0:
                         f1, _ = self.evaluate(model, examples_dev, stored_info, len(loss_history), official=False, conll_path=self.config['conll_eval_path'], tb_writer=tb_writer)
+                        for scheduler in schedulers['per_eval']:
+                            scheduler.step(f1)
+                        if schedulers['per_eval']:
+                            logger.info('Eval LR: bert %.3e, task %.3e' %
+                                        (optimizers[0].param_groups[0]['lr'], optimizers[1].param_groups[-1]['lr']))
                         if f1 > max_f1:
                             max_f1 = f1
                             best_model_path = self.save_model_checkpoint(model, len(loss_history))
@@ -357,10 +362,13 @@ class Runner:
     def get_scheduler(self, optimizers, total_update_steps):
         # Only warm up bert lr
         warmup_steps = int(total_update_steps * self.config['warmup_ratio'])
+        scheduler_type = self.config['lr_scheduler_type']
 
         def lr_lambda_bert(current_step):
             if current_step < warmup_steps:
                 return float(current_step) / float(max(1, warmup_steps))
+            if scheduler_type == 'plateau':
+                return 1.0  # hold at peak after warmup; ReduceLROnPlateau drives the decay instead
             return max(
                 0.0, float(total_update_steps - current_step) / float(max(1, total_update_steps - warmup_steps))
             )
@@ -368,12 +376,25 @@ class Runner:
         def lr_lambda_task(current_step):
             return max(0.0, float(total_update_steps - current_step) / float(max(1, total_update_steps)))
 
-        schedulers = [
-            LambdaLR(optimizers[0], lr_lambda_bert),
-            LambdaLR(optimizers[1], lr_lambda_task)
-        ]
-        return schedulers
-        # return LambdaLR(optimizer, [lr_lambda_bert, lr_lambda_bert, lr_lambda_task, lr_lambda_task])
+        # per_step schedulers are stepped on every optimizer update; per_eval schedulers
+        # are stepped once per periodic dev evaluation, with the dev F1 as their metric.
+        per_step = [LambdaLR(optimizers[0], lr_lambda_bert)]
+        per_eval = []
+
+        if scheduler_type == 'plateau':
+            plateau_kwargs = dict(
+                mode='max',
+                threshold_mode='abs',  # threshold is in raw F1 points, not a fraction of the current best
+                factor=self.config['lr_scheduler_plateau_factor'],
+                patience=self.config['lr_scheduler_plateau_patience'],
+                threshold=self.config['lr_scheduler_plateau_threshold']
+            )
+            per_eval.append(ReduceLROnPlateau(optimizers[0], **plateau_kwargs))
+            per_eval.append(ReduceLROnPlateau(optimizers[1], **plateau_kwargs))
+        else:
+            per_step.append(LambdaLR(optimizers[1], lr_lambda_task))
+
+        return {'per_step': per_step, 'per_eval': per_eval}
 
     def save_model_checkpoint(self, model, step):
         path_ckpt = join(self.config['log_dir'], f'model_{self.name_suffix}_{step}.bin')
