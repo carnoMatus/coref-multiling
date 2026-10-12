@@ -10,3 +10,6 @@ experiment-runbooks/
 models/
 corefud-scorer/
 .gitignore
+CLAUDE.local.md
+debug/
+extra_docs/
