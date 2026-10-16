@@ -1,8 +1,8 @@
 """Render error_analysis.py's JSON output as an HTML page (saliency-style highlights).
 
-For each error case, shows the mention and its predicted/gold antecedents
-highlighted in their local context (via spaCy's displaCy, in manual mode --
-no spaCy pipeline/model is loaded, it's used purely as a span-highlighting
+For each error case, shows the mention, predicted antecedent and nearest gold
+antecedent as one continuous passage (via spaCy's displaCy, in manual mode --
+no spaCy pipeline/model is loaded, it's used purely as a multi-span highlighting
 renderer), plus a score bar for the ranked candidate list. Pure post-processing
 of the JSON; does not touch the trained model or re-run inference.
 
@@ -34,6 +34,8 @@ body { font-family: sans-serif; max-width: 900px; margin: 2em auto; color: #222;
 .outcome.false_new { background: #f29900; }
 .outcome.false_link { background: #f28b82; }
 .outcome.wrong_link { background: #d93025; }
+.caption { color: #555; margin-bottom: 0.6em; }
+.elision { color: #999; font-style: italic; text-align: center; margin: 0.3em 0; }
 .snippet-label { font-weight: bold; margin-top: 0.8em; }
 .bar-row { display: flex; align-items: center; gap: 0.5em; margin: 2px 0; font-size: 0.9em; }
 .bar-track { background: #eee; width: 300px; height: 14px; border-radius: 3px; overflow: hidden; }
@@ -44,37 +46,65 @@ body { font-family: sans-serif; max-width: 900px; margin: 2em auto; color: #222;
 """
 
 
-def window_snippet(tokenizer, tokens, span, context):
-    """Build a local context window and locate the span's character offsets in it.
+def build_chunks(spans_with_labels, num_tokens, context, max_gap):
+    """Window each span, then merge windows that are close enough to read as one
+    continuous passage. Windows further apart than max_gap stay separate chunks,
+    so a distant antecedent doesn't force rendering everything in between."""
+    windows = []
+    for span, label in spans_with_labels:
+        start = max(0, span[0] - context)
+        end = min(num_tokens - 1, span[1] + context)
+        windows.append([start, end, [(span, label)]])
+    windows.sort(key=lambda w: w[0])
+
+    merged = [windows[0]]
+    for w in windows[1:]:
+        last = merged[-1]
+        if w[0] - last[1] <= max_gap:
+            last[1] = max(last[1], w[1])
+            last[2].extend(w[2])
+        else:
+            merged.append(w)
+    return merged
+
+
+def render_chunk(tokenizer, tokens, start, end, spans_with_labels):
+    """One decoded text block with all its spans found and highlighted inside it.
 
     Can't just join subtokens with spaces: this repo's experiments use WordPiece,
-    SentencePiece and byte-level BPE tokenizers, each with its own convention for
-    marking word boundaries, so only the matching tokenizer's own decoder gives
-    back correct text. Offsets are found by searching for the span's own decoded
-    text near where the decoded prefix ends, since decoding isn't always exactly
+    SentencePiece and byte-level BPE tokenizers, each with its own word-boundary
+    convention, so only the matching tokenizer's own decoder gives back correct
+    text. Offsets are found by searching for each span's own decoded text near
+    where its decoded prefix ends, since decoding isn't always exactly
     prefix-stable at the boundary (e.g. trailing-space trimming).
     """
-    start = max(0, span[0] - context)
-    end = min(len(tokens) - 1, span[1] + context)
     window = tokens[start:end + 1]
-    local_start, local_end = span[0] - start, span[1] - start
-
     text = tokenizer.convert_tokens_to_string(window)
-    prefix = tokenizer.convert_tokens_to_string(window[:local_start])
-    span_only = tokenizer.convert_tokens_to_string(window[local_start:local_end + 1])
-
-    char_start = text.find(span_only, max(0, len(prefix) - 2))
-    if char_start == -1:
-        char_start = text.find(span_only)
-    if char_start == -1:
-        return text, 0, len(text)  # fallback: highlight the whole window
-    return text, char_start, char_start + len(span_only)
-
-
-def render_snippet(tokenizer, tokens, span, label, title, context):
-    text, start, end = window_snippet(tokenizer, tokens, span, context)
-    ex = {'text': text, 'ents': [{'start': start, 'end': end, 'label': label}], 'title': title}
+    ents = []
+    for span, label in spans_with_labels:
+        local_start, local_end = span[0] - start, span[1] - start
+        prefix = tokenizer.convert_tokens_to_string(window[:local_start])
+        span_only = tokenizer.convert_tokens_to_string(window[local_start:local_end + 1])
+        char_start = text.find(span_only, max(0, len(prefix) - 2))
+        if char_start == -1:
+            char_start = text.find(span_only)
+        if char_start == -1:
+            continue  # couldn't locate it; skip rather than mis-highlight
+        ents.append({'start': char_start, 'end': char_start + len(span_only), 'label': label})
+    ents.sort(key=lambda e: e['start'])
+    ex = {'text': text, 'ents': ents, 'title': None}
     return displacy.render(ex, style='ent', manual=True, jupyter=False, options={'colors': COLORS})
+
+
+def render_passage(tokenizer, tokens, spans_with_labels, context, max_gap):
+    chunks = build_chunks(spans_with_labels, len(tokens), context, max_gap)
+    pieces = []
+    for i, (start, end, labels) in enumerate(chunks):
+        if i > 0:
+            gap = start - chunks[i - 1][1]
+            pieces.append(f'<div class="elision">&#8942; {gap} tokens omitted &#8942;</div>')
+        pieces.append(render_chunk(tokenizer, tokens, start, end, labels))
+    return '\n'.join(pieces)
 
 
 def render_ranking(ranking, predicted_span, gold_spans):
@@ -84,7 +114,7 @@ def render_ranking(ranking, predicted_span, gold_spans):
     rows = []
     for c in ranking:
         span = tuple(c['span'])
-        cls = 'is-predicted' if predicted_span and span == tuple(predicted_span) \
+        cls = 'is-predicted' if predicted_span and span == predicted_span \
             else 'is-gold' if span in gold_spans else ''
         width = (c['score'] - lo) / spread * 100
         rows.append(
@@ -95,32 +125,41 @@ def render_ranking(ranking, predicted_span, gold_spans):
     return '\n'.join(rows)
 
 
-def render_case(tokenizer, case, outcome, tokens, context):
+def render_case(tokenizer, case, outcome, tokens, context, max_gap):
     mention_span = tuple(case['mention_span'])
-    predicted_span = case['predicted_antecedent_span']
-    gold_spans = {tuple(m) for m in case['gold_antecedent_spans']}
+    predicted_span = tuple(case['predicted_antecedent_span']) if case['predicted_antecedent_span'] else None
+    gold_spans = [tuple(m) for m in case['gold_antecedent_spans']]
+    nearest_gold = max(gold_spans, key=lambda m: m[1]) if gold_spans else None
+
+    spans_with_labels = [(mention_span, 'MENTION')]
+    if predicted_span:
+        spans_with_labels.append((predicted_span, 'PREDICTED'))
+    if nearest_gold:
+        spans_with_labels.append((nearest_gold, 'GOLD'))
+
+    caption_bits = []
+    if predicted_span:
+        caption_bits.append('Predicted &rarr; <b>%s</b> (score %.2f)' %
+                             (html.escape(case['predicted_antecedent']), case['predicted_score']))
+    if case['gold_antecedents']:
+        gold_text = '; '.join(html.escape(g) for g in case['gold_antecedents'])
+        caption_bits.append(f'Gold &rarr; <b>{gold_text}</b>')
 
     parts = [
         f'<div class="case"><h3>{html.escape(case["doc_key"])} '
         f'<span class="outcome {outcome}">{outcome}</span></h3>',
-        '<div class="snippet-label">Mention</div>',
-        render_snippet(tokenizer, tokens, mention_span, 'MENTION', 'mention', context),
     ]
-    if predicted_span:
-        parts.append('<div class="snippet-label">Predicted link (score %.2f)</div>' % case['predicted_score'])
-        parts.append(render_snippet(tokenizer, tokens, tuple(predicted_span), 'PREDICTED', 'predicted antecedent', context))
-    if gold_spans:
-        parts.append('<div class="snippet-label">Gold link(s)</div>')
-        for span in sorted(gold_spans):
-            parts.append(render_snippet(tokenizer, tokens, span, 'GOLD', 'gold antecedent', context))
+    if caption_bits:
+        parts.append('<div class="caption">' + ' &nbsp;|&nbsp; '.join(caption_bits) + '</div>')
+    parts.append(render_passage(tokenizer, tokens, spans_with_labels, context, max_gap))
     if case['ranking']:
         parts.append('<div class="snippet-label">Top candidates (ranked by score)</div>')
-        parts.append(render_ranking(case['ranking'], predicted_span, gold_spans))
+        parts.append(render_ranking(case['ranking'], predicted_span, set(gold_spans)))
     parts.append('</div>')
     return '\n'.join(parts)
 
 
-def visualize(error_json_path, config_name, outcomes=None, limit=10, context=10, out_path=None):
+def visualize(error_json_path, config_name, outcomes=None, limit=10, context=15, max_gap=60, out_path=None):
     with open(error_json_path, encoding='utf-8') as f:
         data = json.load(f)
 
@@ -133,7 +172,7 @@ def visualize(error_json_path, config_name, outcomes=None, limit=10, context=10,
     for outcome in outcomes:
         for case in data['errors'].get(outcome, [])[:limit]:
             tokens = doc_tokens[case['doc_key']]
-            body.append(render_case(tokenizer, case, outcome, tokens, context))
+            body.append(render_case(tokenizer, case, outcome, tokens, context, max_gap))
 
     html_doc = f'<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head>' \
                f'<body><h2>Error analysis: {html.escape(config_name)}</h2>{"".join(body)}</body></html>'
@@ -151,7 +190,10 @@ if __name__ == '__main__':
     parser.add_argument('config_name', help='same config used to produce the JSON (to locate the dev jsonlines)')
     parser.add_argument('--outcomes', help='comma-separated subset of false_new,false_link,wrong_link')
     parser.add_argument('--limit', type=int, default=10, help='max cases per outcome category')
-    parser.add_argument('--context', type=int, default=10, help='tokens of context on each side of a span')
+    parser.add_argument('--context', type=int, default=15, help='tokens of context on each side of a span')
+    parser.add_argument('--max-gap', type=int, default=60,
+                         help='merge spans into one continuous passage if closer than this many tokens, '
+                              'otherwise show them as separate chunks with an omitted-text marker between')
     parser.add_argument('--out', help='output HTML path')
     args = parser.parse_args()
 
@@ -160,5 +202,6 @@ if __name__ == '__main__':
         outcomes=args.outcomes.split(',') if args.outcomes else None,
         limit=args.limit,
         context=args.context,
+        max_gap=args.max_gap,
         out_path=args.out,
     )
