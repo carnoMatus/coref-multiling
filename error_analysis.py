@@ -20,6 +20,7 @@ from transformers import AutoTokenizer
 from run import Runner
 from tensorize import Tensorizer
 import util
+import prodrop
 
 
 def load_doc_tokens(data_dir, language, max_seg_len):
@@ -33,11 +34,26 @@ def load_doc_tokens(data_dir, language, max_seg_len):
     return tokens
 
 
-def span_text(tokenizer, tokens, start, end):
+def load_doc_subtoken_maps(data_dir, language, max_seg_len):
+    """doc_key -> subtoken_map (subtoken index -> word index), needed to cross-reference
+    pro-drop/empty-node words (see prodrop.py)."""
+    path = join(data_dir, f'{language}-dev.{max_seg_len}.jsonlines')
+    maps = {}
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            example = json.loads(line)
+            maps[example['doc_key']] = example['subtoken_map']
+    return maps
+
+
+def span_text(tokenizer, tokens, start, end, subtoken_map=None, word_flags=None):
     """Subtokens need the tokenizer's own decoder, not a naive join: this repo's experiments use
     WordPiece ('##' continuations), SentencePiece ('▁' word starts) and byte-level BPE (RobeCzech),
     and only the matching tokenizer can reverse any of those correctly."""
-    return tokenizer.convert_tokens_to_string(tokens[start:end + 1])
+    text = tokenizer.convert_tokens_to_string(tokens[start:end + 1])
+    if subtoken_map and prodrop.span_is_elided(subtoken_map, word_flags, start, end):
+        text = f'({text})'
+    return text
 
 
 def gold_cluster_lookup(gold_clusters):
@@ -75,6 +91,8 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
     _, examples_dev = runner.data.get_tensor_examples()
     stored_info = runner.data.get_stored_info()
     doc_tokens = load_doc_tokens(runner.data.data_dir, runner.data.language, runner.data.max_seg_len)
+    doc_subtoken_maps = load_doc_subtoken_maps(runner.data.data_dir, runner.data.language, runner.data.max_seg_len)
+    doc_word_flags = prodrop.load_empty_word_flags(conf['conll_pred_path'])
     tokenizer = AutoTokenizer.from_pretrained(conf['bert_tokenizer_name'])
 
     if doc_keys:
@@ -86,11 +104,16 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
 
     errors = defaultdict(list)
     num_correct = 0
+    next_id = 1
 
     for doc_key, tensor_example in examples_dev:
         gold_clusters = stored_info['gold'][doc_key]
         span_to_cluster, non_anaphoric = gold_cluster_lookup(gold_clusters)
         tokens = doc_tokens[doc_key]
+        subtoken_map = doc_subtoken_maps[doc_key]
+        word_flags = doc_word_flags[doc_key]
+        text_of = lambda s, e: span_text(tokenizer, tokens, s, e, subtoken_map, word_flags)
+        elided_of = lambda s, e: prodrop.span_is_elided(subtoken_map, word_flags, s, e)
 
         tensor_example = tensor_example[:7]  # strip gold; inference only
         num_sentences = tensor_example[0].shape[0]
@@ -122,26 +145,36 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
                 if len(errors[outcome]) >= max_errors:
                     continue
 
-                candidates = [(idx, score) for idx, score in zip(antecedent_idx[i], antecedent_scores[i][1:])
+                # antecedent_scores[i][0] is a fixed zero baseline for "no antecedent" (model.py
+                # hard-codes it via torch.cat([zeros(...), top_pairwise_scores])); it has no span
+                # of its own, so it's added separately rather than zipped with antecedent_idx.
+                candidates = [(spans[idx], text_of(*spans[idx]), score)
+                              for idx, score in zip(antecedent_idx[i], antecedent_scores[i][1:])
                               if score != float('-inf')]
-                candidates.sort(key=lambda p: p[1], reverse=True)
+                candidates.append((None, 'Ø (no antecedent)', antecedent_scores[i][0]))
+                candidates.sort(key=lambda t: t[2], reverse=True)
 
                 gold_cluster_id = span_to_cluster[span]
                 gold_antecedents = [m for m, c in span_to_cluster.items()
                                     if c == gold_cluster_id and m != span and m < span]
 
                 errors[outcome].append({
+                    'id': next_id,
                     'doc_key': doc_key,
-                    'mention': span_text(tokenizer, tokens, *span),
+                    'mention': text_of(*span),
                     'mention_span': list(span),
-                    'predicted_antecedent': span_text(tokenizer, tokens, *predicted_antecedent) if predicted_antecedent else None,
+                    'mention_is_elided': elided_of(*span),
+                    'predicted_antecedent': text_of(*predicted_antecedent) if predicted_antecedent else None,
                     'predicted_antecedent_span': list(predicted_antecedent) if predicted_antecedent else None,
+                    'predicted_antecedent_is_elided': elided_of(*predicted_antecedent) if predicted_antecedent else None,
                     'predicted_score': best_score,
-                    'gold_antecedents': [span_text(tokenizer, tokens, *m) for m in gold_antecedents],
+                    'gold_antecedents': [text_of(*m) for m in gold_antecedents],
                     'gold_antecedent_spans': [list(m) for m in gold_antecedents],
-                    'ranking': [{'candidate': span_text(tokenizer, tokens, *spans[idx]), 'span': list(spans[idx]), 'score': score}
-                                for idx, score in candidates[:top_k]],
+                    'gold_antecedent_is_elided': [elided_of(*m) for m in gold_antecedents],
+                    'ranking': [{'candidate': text, 'span': list(cand_span) if cand_span else None, 'score': score}
+                                for cand_span, text, score in candidates[:top_k]],
                 })
+                next_id += 1
 
     summary = {outcome: len(cases) for outcome, cases in errors.items()}
     summary['correct'] = num_correct

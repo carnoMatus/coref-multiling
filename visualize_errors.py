@@ -22,7 +22,7 @@ except ImportError:
 from transformers import AutoTokenizer
 
 import util
-from error_analysis import load_doc_tokens
+from error_analysis import load_doc_tokens, load_doc_subtoken_maps
 
 COLORS = {'MENTION': '#8ab4f8', 'PREDICTED': '#f28b82', 'GOLD': '#81c995'}
 
@@ -42,19 +42,41 @@ body { font-family: sans-serif; max-width: 900px; margin: 2em auto; color: #222;
 .bar-fill { background: #8ab4f8; height: 100%; }
 .bar-fill.is-predicted { background: #f28b82; }
 .bar-fill.is-gold { background: #81c995; }
+.bar-fill.is-dummy { background: repeating-linear-gradient(45deg, #999, #999 4px, #bbb 4px, #bbb 8px); }
 .bar-text { white-space: nowrap; }
 """
 
 
-def build_chunks(spans_with_labels, num_tokens, context, max_gap):
+def snap_to_word_boundary(subtoken_map, start, end):
+    """Extend [start, end] outward until both ends land on a real word boundary.
+
+    A context window cut mid-word lands on a bare continuation subtoken (e.g. a
+    WordPiece "##xyz" with no preceding piece in the window) that the tokenizer's
+    decoder can't merge back into its word, leaking the raw marker into the text.
+    subtoken_map (subtoken index -> word index) is defined the same way regardless
+    of tokenizer family, so this snapping works for WordPiece, SentencePiece and
+    byte-BPE alike.
+    """
+    word_start = subtoken_map[start]
+    while start > 0 and subtoken_map[start - 1] == word_start:
+        start -= 1
+    word_end = subtoken_map[end]
+    while end < len(subtoken_map) - 1 and subtoken_map[end + 1] == word_end:
+        end += 1
+    return start, end
+
+
+def build_chunks(spans_with_labels, num_tokens, context, max_gap, subtoken_map):
     """Window each span, then merge windows that are close enough to read as one
     continuous passage. Windows further apart than max_gap stay separate chunks,
     so a distant antecedent doesn't force rendering everything in between."""
     windows = []
-    for span, label in spans_with_labels:
+    for item in spans_with_labels:  # item = (span, label, is_elided)
+        span = item[0]
         start = max(0, span[0] - context)
         end = min(num_tokens - 1, span[1] + context)
-        windows.append([start, end, [(span, label)]])
+        start, end = snap_to_word_boundary(subtoken_map, start, end)
+        windows.append([start, end, [item]])
     windows.sort(key=lambda w: w[0])
 
     merged = [windows[0]]
@@ -68,7 +90,7 @@ def build_chunks(spans_with_labels, num_tokens, context, max_gap):
     return merged
 
 
-def render_chunk(tokenizer, tokens, start, end, spans_with_labels):
+def render_chunk(tokenizer, tokens, start, end, spans_with_labels, lead_ellipsis=False, trail_ellipsis=False):
     """One decoded text block with all its spans found and highlighted inside it.
 
     Can't just join subtokens with spaces: this repo's experiments use WordPiece,
@@ -81,7 +103,7 @@ def render_chunk(tokenizer, tokens, start, end, spans_with_labels):
     window = tokens[start:end + 1]
     text = tokenizer.convert_tokens_to_string(window)
     ents = []
-    for span, label in spans_with_labels:
+    for span, label, is_elided in spans_with_labels:
         local_start, local_end = span[0] - start, span[1] - start
         prefix = tokenizer.convert_tokens_to_string(window[:local_start])
         span_only = tokenizer.convert_tokens_to_string(window[local_start:local_end + 1])
@@ -90,20 +112,46 @@ def render_chunk(tokenizer, tokens, start, end, spans_with_labels):
             char_start = text.find(span_only)
         if char_start == -1:
             continue  # couldn't locate it; skip rather than mis-highlight
-        ents.append({'start': char_start, 'end': char_start + len(span_only), 'label': label})
+        ents.append({'start': char_start, 'end': char_start + len(span_only), 'label': label, 'elided': is_elided})
+
+    # Pro-drop (elided) mentions get wrapped in "(...)", same convention as dump_readable_text.py.
+    # Ascending order with a running shift counter: each insertion pushes every later
+    # ent's (not-yet-visited) offsets forward by the same amount, so they stay correct
+    # when their turn comes, while already-visited (earlier) ents are untouched.
+    ents.sort(key=lambda e: e['start'])
+    shift = 0
+    for ent in ents:
+        ent['start'] += shift
+        ent['end'] += shift
+        if ent.pop('elided'):
+            text = text[:ent['start']] + '(' + text[ent['start']:ent['end']] + ')' + text[ent['end']:]
+            ent['end'] += 2
+            shift += 2
+
+    if lead_ellipsis:
+        text = '… ' + text
+        for ent in ents:
+            ent['start'] += 2
+            ent['end'] += 2
+    if trail_ellipsis:
+        text = text + ' …'
+
     ents.sort(key=lambda e: e['start'])
     ex = {'text': text, 'ents': ents, 'title': None}
     return displacy.render(ex, style='ent', manual=True, jupyter=False, options={'colors': COLORS})
 
 
-def render_passage(tokenizer, tokens, spans_with_labels, context, max_gap):
-    chunks = build_chunks(spans_with_labels, len(tokens), context, max_gap)
+def render_passage(tokenizer, tokens, spans_with_labels, context, max_gap, subtoken_map):
+    chunks = build_chunks(spans_with_labels, len(tokens), context, max_gap, subtoken_map)
     pieces = []
+    n = len(chunks)
     for i, (start, end, labels) in enumerate(chunks):
         if i > 0:
             gap = start - chunks[i - 1][1]
             pieces.append(f'<div class="elision">&#8942; {gap} tokens omitted &#8942;</div>')
-        pieces.append(render_chunk(tokenizer, tokens, start, end, labels))
+        lead = i == 0 and start > 0
+        trail = i == n - 1 and end < len(tokens) - 1
+        pieces.append(render_chunk(tokenizer, tokens, start, end, labels, lead, trail))
     return '\n'.join(pieces)
 
 
@@ -113,8 +161,9 @@ def render_ranking(ranking, predicted_span, gold_spans):
     spread = hi - lo if hi > lo else 1.0
     rows = []
     for c in ranking:
-        span = tuple(c['span'])
-        cls = 'is-predicted' if predicted_span and span == predicted_span \
+        span = tuple(c['span']) if c['span'] else None
+        cls = 'is-dummy' if span is None \
+            else 'is-predicted' if predicted_span and span == predicted_span \
             else 'is-gold' if span in gold_spans else ''
         width = (c['score'] - lo) / spread * 100
         rows.append(
@@ -125,17 +174,18 @@ def render_ranking(ranking, predicted_span, gold_spans):
     return '\n'.join(rows)
 
 
-def render_case(tokenizer, case, outcome, tokens, context, max_gap):
+def render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map):
     mention_span = tuple(case['mention_span'])
     predicted_span = tuple(case['predicted_antecedent_span']) if case['predicted_antecedent_span'] else None
     gold_spans = [tuple(m) for m in case['gold_antecedent_spans']]
-    nearest_gold = max(gold_spans, key=lambda m: m[1]) if gold_spans else None
+    gold_elided = case.get('gold_antecedent_is_elided') or [False] * len(gold_spans)
+    nearest_i = max(range(len(gold_spans)), key=lambda i: gold_spans[i][1]) if gold_spans else None
 
-    spans_with_labels = [(mention_span, 'MENTION')]
+    spans_with_labels = [(mention_span, 'MENTION', bool(case.get('mention_is_elided')))]
     if predicted_span:
-        spans_with_labels.append((predicted_span, 'PREDICTED'))
-    if nearest_gold:
-        spans_with_labels.append((nearest_gold, 'GOLD'))
+        spans_with_labels.append((predicted_span, 'PREDICTED', bool(case.get('predicted_antecedent_is_elided'))))
+    if nearest_i is not None:
+        spans_with_labels.append((gold_spans[nearest_i], 'GOLD', bool(gold_elided[nearest_i])))
 
     caption_bits = []
     if predicted_span:
@@ -146,12 +196,12 @@ def render_case(tokenizer, case, outcome, tokens, context, max_gap):
         caption_bits.append(f'Gold &rarr; <b>{gold_text}</b>')
 
     parts = [
-        f'<div class="case"><h3>{html.escape(case["doc_key"])} '
+        f'<div class="case" id="case-{case["id"]}"><h3>#{case["id"]} &nbsp;{html.escape(case["doc_key"])} '
         f'<span class="outcome {outcome}">{outcome}</span></h3>',
     ]
     if caption_bits:
         parts.append('<div class="caption">' + ' &nbsp;|&nbsp; '.join(caption_bits) + '</div>')
-    parts.append(render_passage(tokenizer, tokens, spans_with_labels, context, max_gap))
+    parts.append(render_passage(tokenizer, tokens, spans_with_labels, context, max_gap, subtoken_map))
     if case['ranking']:
         parts.append('<div class="snippet-label">Top candidates (ranked by score)</div>')
         parts.append(render_ranking(case['ranking'], predicted_span, set(gold_spans)))
@@ -165,6 +215,7 @@ def visualize(error_json_path, config_name, outcomes=None, limit=10, context=15,
 
     conf = util.initialize_config(config_name)
     doc_tokens = load_doc_tokens(conf['data_dir'], conf['language'], conf['max_segment_len'])
+    doc_subtoken_maps = load_doc_subtoken_maps(conf['data_dir'], conf['language'], conf['max_segment_len'])
     tokenizer = AutoTokenizer.from_pretrained(conf['bert_tokenizer_name'])
 
     outcomes = outcomes or list(data['errors'].keys())
@@ -172,7 +223,8 @@ def visualize(error_json_path, config_name, outcomes=None, limit=10, context=15,
     for outcome in outcomes:
         for case in data['errors'].get(outcome, [])[:limit]:
             tokens = doc_tokens[case['doc_key']]
-            body.append(render_case(tokenizer, case, outcome, tokens, context, max_gap))
+            subtoken_map = doc_subtoken_maps[case['doc_key']]
+            body.append(render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map))
 
     html_doc = f'<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head>' \
                f'<body><h2>Error analysis: {html.escape(config_name)}</h2>{"".join(body)}</body></html>'
