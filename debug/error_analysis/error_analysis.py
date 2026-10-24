@@ -12,49 +12,22 @@ import argparse
 import json
 import os
 import random
+import sys
 from collections import defaultdict
 from os.path import join
+
+# This tool lives two levels under the repo root but needs run.py/tensorize.py/
+# util.py, the core training modules, which only resolve if the root is on
+# sys.path -- Python otherwise only looks in this script's own directory.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 import torch
 from transformers import AutoTokenizer
 
 from run import Runner
 from tensorize import Tensorizer
-import util
+import coref_io
 import prodrop
-
-
-def load_doc_tokens(data_dir, language, max_seg_len):
-    """doc_key -> flat subtoken list, read from the same dev jsonlines used for eval."""
-    path = join(data_dir, f'{language}-dev.{max_seg_len}.jsonlines')
-    tokens = {}
-    with open(path, encoding='utf-8') as f:
-        for line in f:
-            example = json.loads(line)
-            tokens[example['doc_key']] = util.flatten(example['sentences'])
-    return tokens
-
-
-def load_doc_subtoken_maps(data_dir, language, max_seg_len):
-    """doc_key -> subtoken_map (subtoken index -> word index), needed to cross-reference
-    pro-drop/empty-node words (see prodrop.py)."""
-    path = join(data_dir, f'{language}-dev.{max_seg_len}.jsonlines')
-    maps = {}
-    with open(path, encoding='utf-8') as f:
-        for line in f:
-            example = json.loads(line)
-            maps[example['doc_key']] = example['subtoken_map']
-    return maps
-
-
-def span_text(tokenizer, tokens, start, end, subtoken_map=None, word_flags=None):
-    """Subtokens need the tokenizer's own decoder, not a naive join: this repo's experiments use
-    WordPiece ('##' continuations), SentencePiece ('▁' word starts) and byte-level BPE (RobeCzech),
-    and only the matching tokenizer can reverse any of those correctly."""
-    text = tokenizer.convert_tokens_to_string(tokens[start:end + 1])
-    if subtoken_map and prodrop.span_is_elided(subtoken_map, word_flags, start, end):
-        text = f'({prodrop.clean_elided_text(text)})'
-    return text
 
 
 def gold_cluster_lookup(gold_clusters):
@@ -67,6 +40,24 @@ def gold_cluster_lookup(gold_clusters):
         for mention in sorted_cluster:
             span_to_cluster[mention] = cluster_id
     return span_to_cluster, non_anaphoric
+
+
+def apportion(counts, total):
+    """Split `total` across counts' keys in proportion to their values, guaranteed
+    to sum to exactly `total`. Rounding each share independently (round(total *
+    share)) can overshoot or undershoot (e.g. shares 12.59/60.67/26.73 round to
+    13+61+27=101, not 100) since the three roundings aren't coordinated; this is
+    the largest-remainder method: floor every share, then hand the leftover units
+    one at a time to whichever keys had the biggest fractional part.
+    """
+    grand_total = sum(counts.values())
+    if not grand_total:
+        return {k: 0 for k in counts}
+    shares = {k: total * v / grand_total for k, v in counts.items()}
+    keep_n = {k: min(int(s), total) for k, s in shares.items()}
+    for k in sorted(shares, key=lambda k: shares[k] - keep_n[k], reverse=True)[:total - sum(keep_n.values())]:
+        keep_n[k] += 1
+    return keep_n
 
 
 def classify(span, predicted_antecedent, span_to_cluster, non_anaphoric):
@@ -92,8 +83,7 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
 
     _, examples_dev = runner.data.get_tensor_examples()
     stored_info = runner.data.get_stored_info()
-    doc_tokens = load_doc_tokens(runner.data.data_dir, runner.data.language, runner.data.max_seg_len)
-    doc_subtoken_maps = load_doc_subtoken_maps(runner.data.data_dir, runner.data.language, runner.data.max_seg_len)
+    doc_data = coref_io.load_doc_data(runner.data.data_dir, runner.data.language, runner.data.max_seg_len)
     doc_word_flags = prodrop.load_empty_word_flags(conf['conll_pred_path'])
     tokenizer = AutoTokenizer.from_pretrained(conf['bert_tokenizer_name'])
 
@@ -111,10 +101,10 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
     for doc_key, tensor_example in examples_dev:
         gold_clusters = stored_info['gold'][doc_key]
         span_to_cluster, non_anaphoric = gold_cluster_lookup(gold_clusters)
-        tokens = doc_tokens[doc_key]
-        subtoken_map = doc_subtoken_maps[doc_key]
+        tokens, subtoken_map = doc_data[doc_key]
         word_flags = doc_word_flags[doc_key]
-        text_of = lambda s, e: span_text(tokenizer, tokens, s, e, subtoken_map, word_flags)
+        text_of = lambda s, e: prodrop.bracket_if_elided(
+            tokenizer.convert_tokens_to_string(tokens[s:e + 1]), subtoken_map, word_flags, s, e)
         elided_of = lambda s, e: prodrop.span_is_elided(subtoken_map, word_flags, s, e)
 
         tensor_example = tensor_example[:7]  # strip gold; inference only
@@ -181,34 +171,18 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
     summary = {outcome: len(cases) for outcome, cases in errors.items()}
     summary['correct'] = num_correct
 
-    rng = random.Random(seed)
+    # A fixed total budget is split across categories by their true proportion (a
+    # category that's 80% of all errors still looks like 80% of the sample); a
+    # per-category cap instead forces every category to the same size, hiding
+    # their true ratio -- see apportion()'s docstring for why that needs care.
     if total_errors is not None:
-        # Sample a FIXED total budget, split across categories in proportion to their
-        # true counts -- so e.g. a category that's 80% of all errors still looks like
-        # 80% of the sample, instead of every category being forced to the same size.
-        #
-        # Rounding each category's share independently (round(total * share)) can land
-        # a few off the requested total either way, since the three roundings aren't
-        # coordinated (e.g. 12.59/60.67/26.73 rounds to 13+61+27=101, not 100). Largest-
-        # remainder apportionment fixes that: floor every share, then hand the leftover
-        # units one at a time to whichever categories had the biggest fractional part --
-        # the total always comes out exact.
-        total_found = sum(len(cases) for cases in errors.values())
-        if total_found:
-            shares = {outcome: total_errors * len(cases) / total_found for outcome, cases in errors.items()}
-            keep_n = {outcome: min(int(share), total_errors) for outcome, share in shares.items()}
-            leftover = total_errors - sum(keep_n.values())
-            by_remainder = sorted(shares, key=lambda o: shares[o] - keep_n[o], reverse=True)
-            for outcome in by_remainder[:leftover]:
-                keep_n[outcome] += 1
-        else:
-            keep_n = {outcome: 0 for outcome in errors}
-        for outcome, cases in errors.items():
-            errors[outcome] = rng.sample(cases, min(keep_n[outcome], len(cases)))
+        keep_n = apportion({o: len(c) for o, c in errors.items()}, total_errors)
     else:
-        cap = max_errors if max_errors is not None else 20
-        for outcome, cases in errors.items():
-            errors[outcome] = rng.sample(cases, min(cap, len(cases)))
+        keep_n = {o: max_errors if max_errors is not None else 20 for o in errors}
+
+    rng = random.Random(seed)
+    for outcome, cases in errors.items():
+        errors[outcome] = rng.sample(cases, min(keep_n[outcome], len(cases)))
 
     result = {'summary': summary, 'errors': errors}
 

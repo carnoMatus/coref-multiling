@@ -11,8 +11,14 @@ Requires: pip install spacy
 import argparse
 import html
 import json
+import os
 import sys
 from os.path import join
+
+# This tool lives two levels under the repo root but needs util.py, a core
+# training module, which only resolves if the root is on sys.path -- Python
+# otherwise only looks in this script's own directory.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 try:
     from spacy import displacy
@@ -23,7 +29,7 @@ from transformers import AutoTokenizer
 
 import util
 import prodrop
-from error_analysis import load_doc_tokens, load_doc_subtoken_maps
+import coref_io
 
 COLORS = {'MENTION': '#8ab4f8', 'PREDICTED': '#f28b82', 'GOLD': '#81c995'}
 
@@ -125,14 +131,11 @@ def render_chunk(tokenizer, tokens, start, end, spans_with_labels, lead_ellipsis
         ent['start'] += shift
         ent['end'] += shift
         if ent.pop('elided'):
-            cleaned = prodrop.clean_elided_text(text[ent['start']:ent['end']])
-            delta = len(cleaned) - (ent['end'] - ent['start'])
-            text = text[:ent['start']] + cleaned + text[ent['end']:]
+            bracketed = prodrop.elide_bracket(text[ent['start']:ent['end']])
+            delta = len(bracketed) - (ent['end'] - ent['start'])
+            text = text[:ent['start']] + bracketed + text[ent['end']:]
             ent['end'] += delta
             shift += delta
-            text = text[:ent['start']] + '(' + text[ent['start']:ent['end']] + ')' + text[ent['end']:]
-            ent['end'] += 2
-            shift += 2
 
     if lead_ellipsis:
         text = '… ' + text
@@ -220,16 +223,14 @@ def visualize(error_json_path, config_name, outcomes=None, limit=10, context=15,
         data = json.load(f)
 
     conf = util.initialize_config(config_name)
-    doc_tokens = load_doc_tokens(conf['data_dir'], conf['language'], conf['max_segment_len'])
-    doc_subtoken_maps = load_doc_subtoken_maps(conf['data_dir'], conf['language'], conf['max_segment_len'])
+    doc_data = coref_io.load_doc_data(conf['data_dir'], conf['language'], conf['max_segment_len'])
     tokenizer = AutoTokenizer.from_pretrained(conf['bert_tokenizer_name'])
 
     outcomes = outcomes or list(data['errors'].keys())
     body = []
     for outcome in outcomes:
         for case in data['errors'].get(outcome, [])[:limit]:
-            tokens = doc_tokens[case['doc_key']]
-            subtoken_map = doc_subtoken_maps[case['doc_key']]
+            tokens, subtoken_map = doc_data[case['doc_key']]
             body.append(render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map))
 
     html_doc = f'<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head>' \

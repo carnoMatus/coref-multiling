@@ -14,7 +14,7 @@ they're inserted at their correct position, in parentheses, so e.g. "Platime"
 linguistics write-ups for pro-drop.
 
 Usage:
-    python dump_readable_text.py cs_pdt-corefud-train.conllu cs_pdt-corefud-dev.conllu --out cs_pdt.txt
+    python debug/error_analysis/dump_readable_text.py cs_pdt-corefud-train.conllu cs_pdt-corefud-dev.conllu --out cs_pdt.txt
 """
 import argparse
 

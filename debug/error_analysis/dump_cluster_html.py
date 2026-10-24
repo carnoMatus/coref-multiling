@@ -14,19 +14,26 @@ trained/evaluated against (the .jsonlines files), matching what
 error_analysis.py calls "gold" -- not the raw CoNLL-U, which also encodes
 bridging relations that aren't part of these flat identity clusters.
 
-Usage:
-    python dump_cluster_html.py train_exp3_base --out clusters.html
+Usage (from the repo root):
+    python debug/error_analysis/dump_cluster_html.py train_exp3_base --out clusters.html
 """
 import argparse
 import html
 import itertools
-import json
+import os
+import sys
 from os.path import join
+
+# This tool lives two levels under the repo root but needs util.py, a core
+# training module, which only resolves if the root is on sys.path -- Python
+# otherwise only looks in this script's own directory.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 from transformers import AutoTokenizer
 
 import util
 import prodrop
+import coref_io
 
 PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948']
 PALETTE_DARK = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767']
@@ -51,11 +58,6 @@ sub.cid { font-size: 0.65em; color: #52514e; margin-left: 1px; }
   :root:not([data-theme="light"]) mark { color: #0b0b0b; }
 }
 """
-
-
-def load_jsonl(path):
-    with open(path, encoding='utf-8') as f:
-        return [json.loads(line) for line in f]
 
 
 def kept_spans(clusters):
@@ -148,8 +150,7 @@ def render_doc(tokenizer, example, word_flags, dark=False):
         if idx == -1:
             continue  # couldn't locate it; skip rather than mis-highlight
         out.append(html.escape(full_text[cursor:idx]))
-        is_elided = prodrop.span_is_elided(subtoken_map, word_flags, s, e)
-        display_text = f'({prodrop.clean_elided_text(span_text)})' if is_elided else span_text
+        display_text = prodrop.bracket_if_elided(span_text, subtoken_map, word_flags, s, e)
         if ci is None:
             out.append(html.escape(display_text))
         else:
@@ -174,7 +175,7 @@ def dump(jsonl_paths, conllu_paths, config_name, out_path):
     body = []
     index = []
     for path in jsonl_paths:
-        for example in load_jsonl(path):
+        for example in coref_io.load_jsonl(path):
             doc_id = html.escape(example['doc_key'])
             index.append(f'<a href="#{doc_id}">{doc_id}</a>')
             body.append(f'<div class="doc" id="{doc_id}"><h3><a href="#{doc_id}">{doc_id}</a></h3>'
@@ -199,12 +200,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     conf = util.initialize_config(args.config_name)
-    if args.jsonl:
-        paths = args.jsonl
-    else:
-        base = join(conf['data_dir'], f"{conf['language']}-{{split}}.{conf['max_segment_len']}.jsonlines")
-        paths = [base.format(split='train'), base.format(split='dev')]
-    conllu_base = join(conf['data_dir'], f"{conf['language']}-{{split}}.conllu")
-    conllu_paths = [conllu_base.format(split='train'), conllu_base.format(split='dev')]
+    paths = args.jsonl or [coref_io.jsonl_path(conf['data_dir'], conf['language'], conf['max_segment_len'], s)
+                           for s in ('train', 'dev')]
+    conllu_paths = [join(conf['data_dir'], f"{conf['language']}-{s}.conllu") for s in ('train', 'dev')]
 
     dump(paths, conllu_paths, args.config_name, args.out)

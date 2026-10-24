@@ -40,3 +40,15 @@ def clean_elided_text(text):
     a naive '_' -> ' ' replace leaves doubled/tripled spaces; collapse them instead.
     """
     return re.sub(r'\s*_\s*', ' ', text)
+
+
+def elide_bracket(text):
+    """Wrap already-known-elided text in "(...)", cleaned of any underscore-joiner."""
+    return f'({clean_elided_text(text)})'
+
+
+def bracket_if_elided(text, subtoken_map, word_flags, start, end):
+    """elide_bracket(text), but only if [start, end] is actually a pro-drop span."""
+    if span_is_elided(subtoken_map, word_flags, start, end):
+        return elide_bracket(text)
+    return text
