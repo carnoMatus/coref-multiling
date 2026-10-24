@@ -77,6 +77,26 @@ def kept_spans(clusters):
     return kept
 
 
+def elided_word_spans(subtoken_map, word_flags):
+    """One (start, end) subtoken span per distinct pro-drop (empty-node) WORD in the
+    document -- not just ones that happen to be gold mentions -- so e.g. generic "pro
+    někoho" reconstructions get the same "(...)" treatment as dump_readable_text.py,
+    wherever they appear, not only inside a coreference cluster highlight."""
+    spans = []
+    i, n = 0, len(subtoken_map)
+    while i < n:
+        if word_flags[subtoken_map[i]]:
+            j = i
+            word = subtoken_map[i]
+            while j < n and subtoken_map[j] == word:
+                j += 1
+            spans.append((i, j - 1))
+            i = j
+        else:
+            i += 1
+    return spans
+
+
 def strip_special_tokens(tokens, subtoken_map, clusters, special_tokens):
     """Documents are split into BERT segments, each wrapped in [CLS]/[SEP] (or
     <s>/</s> etc.) -- drop those structural tokens and remap mention spans onto
@@ -106,20 +126,37 @@ def render_doc(tokenizer, example, word_flags, dark=False):
     full_text = tokenizer.convert_tokens_to_string(tokens)
     palette = PALETTE_DARK if dark else PALETTE
 
+    cluster_spans = kept_spans(clusters)
+
+    def overlaps_a_cluster(s, e):
+        return any(s <= ce and cs <= e for cs, ce, _ in cluster_spans)
+
+    # Pro-drop words already covered by a cluster highlight get bracketed there instead
+    # (see below); this only adds the ones that aren't part of any coreference cluster.
+    plain_elided = [(s, e) for s, e in elided_word_spans(subtoken_map, word_flags)
+                    if not overlaps_a_cluster(s, e)]
+
+    events = sorted([(s, e, ci) for s, e, ci in cluster_spans] +
+                     [(s, e, None) for s, e in plain_elided], key=lambda x: (x[0], x[1]))
+
     out = []
     cursor = 0
     search_from = 0
-    for s, e, ci in kept_spans(clusters):
+    for s, e, ci in events:
         span_text = tokenizer.convert_tokens_to_string(tokens[s:e + 1])
         idx = full_text.find(span_text, search_from)
         if idx == -1:
             continue  # couldn't locate it; skip rather than mis-highlight
         out.append(html.escape(full_text[cursor:idx]))
-        display_text = f'({span_text})' if prodrop.span_is_elided(subtoken_map, word_flags, s, e) else span_text
-        color = palette[ci % len(palette)]
-        border = BORDER_STYLES[(ci // len(palette)) % len(BORDER_STYLES)]
-        out.append(f'<mark style="background:{color}55;border-bottom-style:{border};border-color:{color}">'
-                    f'{html.escape(display_text)}<sub class="cid">{ci + 1}</sub></mark>')
+        is_elided = prodrop.span_is_elided(subtoken_map, word_flags, s, e)
+        display_text = f'({prodrop.clean_elided_text(span_text)})' if is_elided else span_text
+        if ci is None:
+            out.append(html.escape(display_text))
+        else:
+            color = palette[ci % len(palette)]
+            border = BORDER_STYLES[(ci // len(palette)) % len(BORDER_STYLES)]
+            out.append(f'<mark style="background:{color}55;border-bottom-style:{border};border-color:{color}">'
+                        f'{html.escape(display_text)}<sub class="cid">{ci + 1}</sub></mark>')
         cursor = idx + len(span_text)
         search_from = cursor
     out.append(html.escape(full_text[cursor:]))

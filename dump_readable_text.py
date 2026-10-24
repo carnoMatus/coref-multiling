@@ -33,7 +33,11 @@ def sentence_text(tree, use_mwt=True):
                 if mwt.misc['SpaceAfter'] != 'No':
                     parts.append(' ')
         else:
-            parts.append(f'({node.form})' if node.is_empty() else node.form)
+            # Multi-word empty-node reconstructions (e.g. generic "#Gen" nodes like
+            # "pro_někoho", for someone/anyone) join their words with "_" in the CoNLL-U
+            # form field purely because CoNLL-U is one-form-per-line; it's never a real
+            # underscore the author wrote, so swap it back to a space for display.
+            parts.append(f'({node.form.replace("_", " ")})' if node.is_empty() else node.form)
             if node.misc['SpaceAfter'] != 'No':
                 parts.append(' ')
     return ''.join(parts).strip()

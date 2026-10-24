@@ -11,6 +11,7 @@ mentions.
 import argparse
 import json
 import os
+import random
 from collections import defaultdict
 from os.path import join
 
@@ -52,7 +53,7 @@ def span_text(tokenizer, tokens, start, end, subtoken_map=None, word_flags=None)
     and only the matching tokenizer can reverse any of those correctly."""
     text = tokenizer.convert_tokens_to_string(tokens[start:end + 1])
     if subtoken_map and prodrop.span_is_elided(subtoken_map, word_flags, start, end):
-        text = f'({text})'
+        text = f'({prodrop.clean_elided_text(text)})'
     return text
 
 
@@ -81,7 +82,8 @@ def classify(span, predicted_antecedent, span_to_cluster, non_anaphoric):
     return 'correct' if antecedent_cluster == gold_cluster else 'wrong_link'
 
 
-def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_errors=20, top_k=10, out_path=None):
+def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_errors=None, total_errors=None,
+                        top_k=10, out_path=None, seed=0):
     runner = Runner(config_name, gpu_id)
     conf = runner.config
     model = runner.initialize_model(saved_suffix)
@@ -142,8 +144,6 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
                 if outcome == 'correct':
                     num_correct += 1
                     continue
-                if len(errors[outcome]) >= max_errors:
-                    continue
 
                 # antecedent_scores[i][0] is a fixed zero baseline for "no antecedent" (model.py
                 # hard-codes it via torch.cat([zeros(...), top_pairwise_scores])); it has no span
@@ -176,8 +176,40 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
                 })
                 next_id += 1
 
+    # summary reflects every error actually found (uncapped) -- the true ratio between
+    # categories. What gets written out below may be a smaller sample of that.
     summary = {outcome: len(cases) for outcome, cases in errors.items()}
     summary['correct'] = num_correct
+
+    rng = random.Random(seed)
+    if total_errors is not None:
+        # Sample a FIXED total budget, split across categories in proportion to their
+        # true counts -- so e.g. a category that's 80% of all errors still looks like
+        # 80% of the sample, instead of every category being forced to the same size.
+        #
+        # Rounding each category's share independently (round(total * share)) can land
+        # a few off the requested total either way, since the three roundings aren't
+        # coordinated (e.g. 12.59/60.67/26.73 rounds to 13+61+27=101, not 100). Largest-
+        # remainder apportionment fixes that: floor every share, then hand the leftover
+        # units one at a time to whichever categories had the biggest fractional part --
+        # the total always comes out exact.
+        total_found = sum(len(cases) for cases in errors.values())
+        if total_found:
+            shares = {outcome: total_errors * len(cases) / total_found for outcome, cases in errors.items()}
+            keep_n = {outcome: min(int(share), total_errors) for outcome, share in shares.items()}
+            leftover = total_errors - sum(keep_n.values())
+            by_remainder = sorted(shares, key=lambda o: shares[o] - keep_n[o], reverse=True)
+            for outcome in by_remainder[:leftover]:
+                keep_n[outcome] += 1
+        else:
+            keep_n = {outcome: 0 for outcome in errors}
+        for outcome, cases in errors.items():
+            errors[outcome] = rng.sample(cases, min(keep_n[outcome], len(cases)))
+    else:
+        cap = max_errors if max_errors is not None else 20
+        for outcome, cases in errors.items():
+            errors[outcome] = rng.sample(cases, min(cap, len(cases)))
+
     result = {'summary': summary, 'errors': errors}
 
     if out_path is None:
@@ -197,15 +229,24 @@ if __name__ == '__main__':
     parser.add_argument('saved_suffix')
     parser.add_argument('gpu_id', type=int)
     parser.add_argument('--doc-keys', help='comma-separated doc_keys to restrict to')
-    parser.add_argument('--max-errors', type=int, default=20, help='max cases to keep per error category')
+    sampling = parser.add_mutually_exclusive_group()
+    sampling.add_argument('--max-errors', type=int,
+                           help='cap EACH error category independently to this many cases '
+                                '(default 20; categories end up equal-sized, hiding their true ratio)')
+    sampling.add_argument('--total-errors', type=int,
+                           help='keep this many cases TOTAL, split across categories in proportion '
+                                'to how common each actually is (fair to the true mistake ratio)')
     parser.add_argument('--top-k', type=int, default=10, help='candidates to keep per ranking')
     parser.add_argument('--out', help='output JSON path')
+    parser.add_argument('--seed', type=int, default=0, help='random seed for sampling which cases to keep')
     args = parser.parse_args()
 
     run_error_analysis(
         args.config_name, args.saved_suffix, args.gpu_id,
         doc_keys=args.doc_keys.split(',') if args.doc_keys else None,
         max_errors=args.max_errors,
+        total_errors=args.total_errors,
         top_k=args.top_k,
         out_path=args.out,
+        seed=args.seed,
     )

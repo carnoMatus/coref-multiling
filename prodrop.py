@@ -8,6 +8,8 @@ loop over `udapi_document.nodes_and_empty`), with nothing in the .jsonlines
 output distinguishing it -- so telling a real written word from a
 reconstructed one requires cross-referencing the raw .conllu.
 """
+import re
+
 from udapi.core.document import Document
 
 
@@ -28,3 +30,13 @@ def load_empty_word_flags(conllu_path):
 def span_is_elided(subtoken_map, word_flags, start, end):
     """True if every subtoken in [start, end] traces back to an empty node."""
     return all(word_flags[subtoken_map[i]] for i in range(start, end + 1))
+
+
+def clean_elided_text(text):
+    """Multi-word empty-node reconstructions (e.g. generic "pro_někoho", for someone/
+    anyone) join their words with "_" purely as a CoNLL-U one-form-per-line artifact,
+    never a real underscore the author wrote. A subword tokenizer can also split that
+    underscore into its own token, with its decoder inserting a space on each side, so
+    a naive '_' -> ' ' replace leaves doubled/tripled spaces; collapse them instead.
+    """
+    return re.sub(r'\s*_\s*', ' ', text)

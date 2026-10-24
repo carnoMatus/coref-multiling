@@ -22,6 +22,7 @@ except ImportError:
 from transformers import AutoTokenizer
 
 import util
+import prodrop
 from error_analysis import load_doc_tokens, load_doc_subtoken_maps
 
 COLORS = {'MENTION': '#8ab4f8', 'PREDICTED': '#f28b82', 'GOLD': '#81c995'}
@@ -124,6 +125,11 @@ def render_chunk(tokenizer, tokens, start, end, spans_with_labels, lead_ellipsis
         ent['start'] += shift
         ent['end'] += shift
         if ent.pop('elided'):
+            cleaned = prodrop.clean_elided_text(text[ent['start']:ent['end']])
+            delta = len(cleaned) - (ent['end'] - ent['start'])
+            text = text[:ent['start']] + cleaned + text[ent['end']:]
+            ent['end'] += delta
+            shift += delta
             text = text[:ent['start']] + '(' + text[ent['start']:ent['end']] + ')' + text[ent['end']:]
             ent['end'] += 2
             shift += 2
