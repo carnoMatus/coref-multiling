@@ -12,3 +12,4 @@ corefud-scorer/
 .gitignore
 CLAUDE.local.md
 extra_docs/
+.nfs*

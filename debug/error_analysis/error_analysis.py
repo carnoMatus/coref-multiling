@@ -101,7 +101,7 @@ def run_error_analysis(config_name, saved_suffix, gpu_id, doc_keys=None, max_err
     for doc_key, tensor_example in examples_dev:
         gold_clusters = stored_info['gold'][doc_key]
         span_to_cluster, non_anaphoric = gold_cluster_lookup(gold_clusters)
-        tokens, subtoken_map = doc_data[doc_key]
+        tokens, subtoken_map, _ = doc_data[doc_key]
         word_flags = doc_word_flags[doc_key]
         text_of = lambda s, e: prodrop.bracket_if_elided(
             tokenizer.convert_tokens_to_string(tokens[s:e + 1]), subtoken_map, word_flags, s, e)

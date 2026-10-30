@@ -150,14 +150,20 @@ def render_chunk(tokenizer, tokens, start, end, spans_with_labels, lead_ellipsis
     return displacy.render(ex, style='ent', manual=True, jupyter=False, options={'colors': COLORS})
 
 
-def render_passage(tokenizer, tokens, spans_with_labels, context, max_gap, subtoken_map):
+def render_passage(tokenizer, tokens, spans_with_labels, context, max_gap, subtoken_map, sentence_map):
     chunks = build_chunks(spans_with_labels, len(tokens), context, max_gap, subtoken_map)
     pieces = []
     n = len(chunks)
     for i, (start, end, labels) in enumerate(chunks):
         if i > 0:
             gap = start - chunks[i - 1][1]
-            pieces.append(f'<div class="elision">&#8942; {gap} tokens omitted &#8942;</div>')
+            # sentence_map is monotonically increasing per subtoken, so the difference
+            # between the two chunk-boundary tokens counts the sentence breaks crossed
+            # in between -- i.e. how many sentences separate the two mentions.
+            gap_sentences = sentence_map[start] - sentence_map[chunks[i - 1][1]]
+            sentence_word = 'sentence' if gap_sentences == 1 else 'sentences'
+            pieces.append(f'<div class="elision">&#8942; {gap} tokens omitted, '
+                           f'{gap_sentences} {sentence_word} between mentions &#8942;</div>')
         lead = i == 0 and start > 0
         trail = i == n - 1 and end < len(tokens) - 1
         pieces.append(render_chunk(tokenizer, tokens, start, end, labels, lead, trail))
@@ -183,7 +189,7 @@ def render_ranking(ranking, predicted_span, gold_spans):
     return '\n'.join(rows)
 
 
-def render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map):
+def render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map, sentence_map):
     mention_span = tuple(case['mention_span'])
     predicted_span = tuple(case['predicted_antecedent_span']) if case['predicted_antecedent_span'] else None
     gold_spans = [tuple(m) for m in case['gold_antecedent_spans']]
@@ -210,7 +216,7 @@ def render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map
     ]
     if caption_bits:
         parts.append('<div class="caption">' + ' &nbsp;|&nbsp; '.join(caption_bits) + '</div>')
-    parts.append(render_passage(tokenizer, tokens, spans_with_labels, context, max_gap, subtoken_map))
+    parts.append(render_passage(tokenizer, tokens, spans_with_labels, context, max_gap, subtoken_map, sentence_map))
     if case['ranking']:
         parts.append('<div class="snippet-label">Top candidates (ranked by score)</div>')
         parts.append(render_ranking(case['ranking'], predicted_span, set(gold_spans)))
@@ -230,8 +236,8 @@ def visualize(error_json_path, config_name, outcomes=None, limit=10, context=15,
     body = []
     for outcome in outcomes:
         for case in data['errors'].get(outcome, [])[:limit]:
-            tokens, subtoken_map = doc_data[case['doc_key']]
-            body.append(render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map))
+            tokens, subtoken_map, sentence_map = doc_data[case['doc_key']]
+            body.append(render_case(tokenizer, case, outcome, tokens, context, max_gap, subtoken_map, sentence_map))
 
     html_doc = f'<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head>' \
                f'<body><h2>Error analysis: {html.escape(config_name)}</h2>{"".join(body)}</body></html>'
