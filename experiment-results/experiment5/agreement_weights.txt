@@ -1,0 +1,24 @@
+== data/train_exp5_agreement/model_Sep24_22-02-09_1000.bin
+  column norms (init ~1.10): span-emb mean 1.11 | antecedent-distance mean 1.42 | agreement mean 1.44
+  antecedent distance, linearised effect per bucket: -0.021 -1.035 -0.378 0.063 0.132 0.358 0.806 0.546 0.016 -0.986  (spread 1.841)
+  Gender  linearised effect agree +0.974  disagree -0.677  unknown -0.772  (spread 1.747); column norms 1.95 1.50 1.59
+  Number  linearised effect agree +0.580  disagree -0.654  unknown -0.781  (spread 1.362); column norms 1.47 1.45 1.59
+  Person  linearised effect agree +0.164  disagree -0.078  unknown -0.216  (spread 0.379); column norms 1.12 1.12 1.13
+== data/train_exp5_agreement/model_Sep24_22-02-09_10000.bin
+  column norms (init ~1.10): span-emb mean 1.46 | antecedent-distance mean 2.76 | agreement mean 2.66
+  antecedent distance, linearised effect per bucket: 0.051 3.377 2.948 2.759 2.146 1.546 0.503 -1.135 -2.557 -2.972  (spread 6.349)
+  Gender  linearised effect agree +0.742  disagree -2.432  unknown -0.873  (spread 3.173); column norms 2.81 3.73 2.06
+  Number  linearised effect agree +0.837  disagree -2.191  unknown -2.070  (spread 3.028); column norms 2.17 3.46 2.52
+  Person  linearised effect agree +1.307  disagree -3.414  unknown -0.976  (spread 4.722); column norms 2.58 2.82 1.76
+== data/train_exp5_agreement/model_Sep24_22-02-09_44000.bin
+  column norms (init ~1.10): span-emb mean 2.12 | antecedent-distance mean 3.77 | agreement mean 4.17
+  antecedent distance, linearised effect per bucket: -0.054 7.633 6.396 5.751 4.471 3.747 1.950 -1.373 -4.986 -6.816  (spread 14.450)
+  Gender  linearised effect agree +2.829  disagree -4.460  unknown -1.191  (spread 7.289); column norms 4.46 5.94 3.19
+  Number  linearised effect agree +3.127  disagree -4.808  unknown -2.939  (spread 7.935); column norms 3.72 5.60 3.75
+  Person  linearised effect agree +2.564  disagree -11.076  unknown +0.023  (spread 13.640); column norms 4.01 4.26 2.60
+== data/train_exp5_agreement/model_Sep24_22-02-09_113000.bin
+  column norms (init ~1.10): span-emb mean 2.43 | antecedent-distance mean 4.22 | agreement mean 5.06
+  antecedent distance, linearised effect per bucket: -0.079 13.435 11.597 9.814 8.721 6.679 3.885 -2.139 -9.755 -13.139  (spread 26.574)
+  Gender  linearised effect agree +6.930  disagree -7.221  unknown -0.510  (spread 14.152); column norms 5.43 7.39 3.85
+  Number  linearised effect agree +7.974  disagree -7.501  unknown -4.654  (spread 15.475); column norms 4.58 6.93 4.52
+  Person  linearised effect agree +6.057  disagree -17.775  unknown +2.495  (spread 23.831); column norms 4.73 5.00 3.12
