@@ -7,9 +7,11 @@ data
 results
 .claude
 experiment-runbooks/
+experiment-results/
 models/
 corefud-scorer/
 .gitignore
 CLAUDE.local.md
 extra_docs/
 .nfs*
+support-data/
