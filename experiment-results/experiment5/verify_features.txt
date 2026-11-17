@@ -1,0 +1,5 @@
+dev preprocessing: {'words': 90508, 'tags_ok': 90508, 'parents_checked': 82926, 'parents_ok': 82926}
+trn cache: {'docs': 2533, 'parents_in_window': 1144054, 'parents_consistent': 1144054, 'gold': 136984, 'gold_has_head': 136984, 'gold_head_with_upos': 136984, 'gold_head_with_feats': 129084}
+   gold head UPOS: [('NOUN', 68536), ('PRON', 22142), ('PROPN', 17553), ('DET', 14167), ('ADJ', 8654), ('ADV', 2313), ('VERB', 1773), ('NUM', 1257)]
+dev cache: {'docs': 316, 'parents_in_window': 156778, 'parents_consistent': 156778, 'gold': 20142, 'gold_has_head': 20142, 'gold_head_with_upos': 20142, 'gold_head_with_feats': 18943}
+   gold head UPOS: [('NOUN', 10227), ('PRON', 3223), ('PROPN', 2275), ('DET', 2007), ('ADJ', 1427), ('ADV', 438), ('VERB', 270), ('NUM', 189)]

@@ -53,7 +53,11 @@ class CorefDataProcessor:
 
     @classmethod
     def convert_to_torch_tensor(cls, input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map,
-                                is_training, gold_starts, gold_ends, gold_mention_cluster_map):
+                                is_training, gold_starts, gold_ends, gold_mention_cluster_map, ling=None):
+        if ling is not None:  # Experiment 5: appended as an 11th element
+            return cls.convert_to_torch_tensor(input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map,
+                                               is_training, gold_starts, gold_ends, gold_mention_cluster_map) + \
+                   (torch.tensor(ling, dtype=torch.long),)
         input_ids = torch.tensor(input_ids, dtype=torch.long)
         input_mask = torch.tensor(input_mask, dtype=torch.long)
         speaker_ids = torch.tensor(speaker_ids, dtype=torch.long)
@@ -165,14 +169,34 @@ class Tensorizer:
         gold_starts, gold_ends = self._tensorize_spans(gold_mentions)
         example_tensor = (input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map, is_training,
                           gold_starts, gold_ends, gold_mention_cluster_map)
+        ling = None
+        if self.config.get('linguistic_data', False):  # Experiment 5
+            assert 'ling' in example, 'linguistic_data is on but the jsonlines has no "ling" field; rerun preprocess.py'
+            ling = np.array(example['ling'], dtype=np.int64)
+            assert ling.shape[0] == num_words, (ling.shape, num_words)
 
         if is_training and len(sentences) > self.config['max_training_sentences']:
-            return doc_key, self.truncate_example(*example_tensor)
+            return doc_key, self.truncate_example(*example_tensor, ling=ling)
+        elif ling is not None:
+            return doc_key, example_tensor + (ling,)
         else:
             return doc_key, example_tensor
 
     def truncate_example(self, input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map, is_training,
-                         gold_starts=None, gold_ends=None, gold_mention_cluster_map=None, sentence_offset=None):
+                         gold_starts=None, gold_ends=None, gold_mention_cluster_map=None, sentence_offset=None, ling=None):
+        """ ling (Experiment 5), when given, is truncated too and appended as the last element """
+        if ling is not None:
+            sent_offset = sentence_offset
+            if sent_offset is None:
+                sent_offset = random.randint(0, input_ids.shape[0] - self.config["max_training_sentences"])
+            truncated = self.truncate_example(input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map, is_training,
+                                              gold_starts, gold_ends, gold_mention_cluster_map, sent_offset)
+            word_offset = sentence_len[:sent_offset].sum()
+            num_words = truncated[3].sum()
+            ling = ling[word_offset: word_offset + num_words]
+            ling = ling.clone() if isinstance(ling, torch.Tensor) else ling.copy()  # numpy at tensorization, torch at eval
+            ling[:, 1:3] -= word_offset  # Parent positions into the new coordinates (NO_PARENT stays far outside)
+            return truncated + (ling,)
         max_sentences = self.config["max_training_sentences"]
         num_sentences = input_ids.shape[0]
         assert num_sentences > max_sentences
@@ -200,13 +224,13 @@ class Tensorizer:
                is_training, gold_starts, gold_ends, gold_mention_cluster_map
 
     def split_example(self, input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map, is_training,
-                      gold_starts=None, gold_ends=None, gold_mention_cluster_map=None, sentence_offset=None):
+                      gold_starts=None, gold_ends=None, gold_mention_cluster_map=None, sentence_offset=None, ling=None):
         max_sentences = self.config["max_training_sentences"] if "max_pred_sentences" not in self.config else self.config["max_pred_sentences"]
         num_sentences = input_ids.shape[0]
         offset = 0
         splits = []
         while offset < num_sentences:
             splits.append(self.truncate_example(input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map, is_training,
-                                                gold_starts, gold_ends, gold_mention_cluster_map, sentence_offset=offset))
+                                                gold_starts, gold_ends, gold_mention_cluster_map, sentence_offset=offset, ling=ling))
             offset += max_sentences
         return splits

@@ -7,6 +7,7 @@ from collections.abc import Iterable
 import numpy as np
 import torch.nn.init as init
 import higher_order as ho
+import ling_features
 
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
@@ -37,7 +38,19 @@ class CorefModel(nn.Module):
         self.span_emb_size = self.bert_emb_size * 3
         if config['use_features']:
             self.span_emb_size += config['feature_emb_size']
+        # Experiment 5: gold UPOS/FEATS of the span's syntactic head (one-hot, appended to the span emb)
+        self.span_ling_mode = config.get('span_ling_features', 'none')
+        self.span_ling_cols = ling_features.SPAN_FEATURE_COLS[self.span_ling_mode]
+        self.span_emb_size += ling_features.span_feature_dim(self.span_ling_mode)
+        self.pairwise_agreement = config.get('pairwise_agreement', False)
+        if self.pairwise_agreement:
+            assert config['fine_grained']  # Agreement enters the slow pairwise scorer
+        self.log_head_ambiguity = config.get('log_head_ambiguity', False)
+        self.uses_ling = self.span_ling_cols is not None or self.pairwise_agreement or self.log_head_ambiguity
+        self.head_ambiguity_stats = None  # Filled per forward pass in eval mode when log_head_ambiguity
         self.pair_emb_size = self.span_emb_size * 3
+        if self.pairwise_agreement:
+            self.pair_emb_size += ling_features.AGREEMENT_DIM
         if config['use_metadata']:
             self.pair_emb_size += 2 * config['feature_emb_size']
         if config['use_features']:
@@ -103,14 +116,16 @@ class CorefModel(nn.Module):
                 task_param.append(to_add)
         return bert_based_param, task_param
 
-    def forward(self, *input):
-        return self.get_predictions_and_loss(*input)
+    def forward(self, *input, **kwargs):
+        return self.get_predictions_and_loss(*input, **kwargs)
 
     def get_predictions_and_loss(self, input_ids, input_mask, speaker_ids, sentence_len, genre, sentence_map,
-                                 is_training, gold_starts=None, gold_ends=None, gold_mention_cluster_map=None):
+                                 is_training, gold_starts=None, gold_ends=None, gold_mention_cluster_map=None, ling=None):
         """ Model and input are already on the device """
         device = self.device
         conf = self.config
+        if self.uses_ling:
+            assert ling is not None, 'Experiment 5 features need linguistic_data = true (and a fresh tensor cache)'
 
         do_loss = False
         if gold_mention_cluster_map is not None:
@@ -166,6 +181,13 @@ class CorefModel(nn.Module):
         candidate_tokens_attn = nn.functional.softmax(candidate_tokens_attn_raw, dim=1)
         head_attn_emb = torch.matmul(candidate_tokens_attn, mention_doc)
         candidate_emb_list.append(head_attn_emb)
+        if self.uses_ling:  # Experiment 5: syntactic head of each candidate span
+            candidate_head_pos, candidate_has_head, candidate_num_qual, candidate_qualifies = \
+                ling_features.find_span_heads(ling, candidate_starts, candidate_ends, self.max_span_width)
+            candidate_head_ling = ling[candidate_head_pos] * candidate_has_head.unsqueeze(1).to(torch.long)  # no head -> zeros
+            if self.span_ling_cols is not None:  # One-hot, no dropout
+                col_start, col_end = self.span_ling_cols
+                candidate_emb_list.append(candidate_head_ling[:, col_start: col_end].to(torch.float))
         candidate_span_emb = torch.cat(candidate_emb_list, dim=1)  # [num candidates, new emb size]
 
         # Get span score
@@ -186,6 +208,22 @@ class CorefModel(nn.Module):
         top_span_emb = candidate_span_emb[selected_idx]
         top_span_cluster_ids = candidate_labels[selected_idx] if do_loss else None
         top_span_mention_scores = candidate_mention_scores[selected_idx]
+        if self.uses_ling:
+            top_span_head_ling = candidate_head_ling[selected_idx]
+            top_span_has_head = candidate_has_head[selected_idx]
+            if self.log_head_ambiguity and not self.training:
+                with torch.no_grad():
+                    candidate_ambiguous = candidate_num_qual > 1
+                    candidate_differs = ling_features.ambiguous_with_different_tags(
+                        ling, candidate_starts, candidate_qualifies, candidate_head_pos) & candidate_ambiguous
+                    self.head_ambiguity_stats = {
+                        'candidates': num_candidates,
+                        'candidates_ambiguous': candidate_ambiguous.sum().item(),
+                        'candidates_differing': candidate_differs.sum().item(),
+                        'top_spans': num_top_spans,
+                        'top_spans_ambiguous': candidate_ambiguous[selected_idx].sum().item(),
+                        'top_spans_differing': candidate_differs[selected_idx].sum().item(),
+                    }
 
         # Coarse pruning on each mention's antecedents
         max_top_antecedents = min(num_top_spans, conf['max_top_antecedents'])
@@ -229,6 +267,9 @@ class CorefModel(nn.Module):
             if conf['use_features']:  # Antecedent distance
                 top_antecedent_distance = util.bucket_distance(top_antecedent_offsets)
                 top_antecedent_distance_emb = self.emb_top_antecedent_distance(top_antecedent_distance)
+            if self.pairwise_agreement:  # Experiment 5 condition 5: head agreement one-hots, no dropout
+                top_span_morph = top_span_head_ling[:, ling_features.FEATS_OFFSET: ling_features.FEATS_OFFSET + ling_features.FEATS_DIM]
+                agreement_emb = ling_features.agreement_features(top_span_morph, top_span_has_head, top_antecedent_idx)
 
             for depth in range(conf['coref_depth']):
                 top_antecedent_emb = top_span_emb[top_antecedent_idx]  # [num top spans, max top antecedents, emb size]
@@ -244,7 +285,10 @@ class CorefModel(nn.Module):
                 feature_emb = self.dropout(feature_emb)
                 target_emb = torch.unsqueeze(top_span_emb, 1).repeat(1, max_top_antecedents, 1)
                 similarity_emb = target_emb * top_antecedent_emb
-                pair_emb = torch.cat([target_emb, top_antecedent_emb, similarity_emb, feature_emb], 2)
+                pair_emb_list = [target_emb, top_antecedent_emb, similarity_emb, feature_emb]
+                if self.pairwise_agreement:
+                    pair_emb_list.append(agreement_emb)
+                pair_emb = torch.cat(pair_emb_list, 2)
                 top_pairwise_slow_scores = torch.squeeze(self.coref_score_ffnn(pair_emb), 2)
                 top_pairwise_scores = top_pairwise_slow_scores + top_pairwise_fast_scores
                 if conf['higher_order'] == 'cluster_merging':

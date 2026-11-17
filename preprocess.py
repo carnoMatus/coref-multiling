@@ -9,6 +9,7 @@ from transformers import BertTokenizer, AutoTokenizer
 import conll
 import util
 import udapi_io
+import ling_features
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO)
@@ -271,8 +272,8 @@ def split_into_segments(document_state: DocumentState, max_seg_len, constraints1
         prev_token_idx = subtoken_map[-1]
 
 
-def get_document(doc_key, language, seg_len, tokenizer, udapi_document=None):
-    """ Process raw input to finalized documents """
+def get_document(doc_key, language, seg_len, tokenizer, udapi_document=None, ling_stats=None):
+    """ Process raw input to finalized documents; ling_stats (a Counter) enables Experiment 5 features """
     document_state = DocumentState(doc_key)
     word_idx = -1
 
@@ -303,6 +304,9 @@ def get_document(doc_key, language, seg_len, tokenizer, udapi_document=None):
         document = document_state.finalize_from_udapi(udapi_document)
     else:
         document = document_state.finalize()
+    if ling_stats is not None:  # Experiment 5: gold UPOS/FEATS + dependency info per subtoken
+        document['ling'] = ling_features.build_ling_rows(list(udapi_document.nodes_and_empty), document_state.segments,
+                                                         document_state.subtoken_map, ling_stats)
     return document
 
 
@@ -312,15 +316,22 @@ def minimize_partition(partition, extension, args, tokenizer):
     doc_count = 0
     logger.info(f'Minimizing {input_path}...')
 
+    ling_stats = collections.Counter() if args.get('linguistic_data', False) else None
+
     # Write documents
     with open(output_path, 'w') as output_file:
         udapi_documents = udapi_io.read_data(input_path)
         for doc in udapi_documents:
-            document = get_document(doc.meta["docname"], args.language, args.max_segment_len, tokenizer, udapi_documents[doc_count])
+            document = get_document(doc.meta["docname"], args.language, args.max_segment_len, tokenizer, udapi_documents[doc_count], ling_stats)
             output_file.write(json.dumps(document))
             output_file.write('\n')
             doc_count += 1
     logger.info(f'Processed {doc_count} documents to {output_path}')
+    if ling_stats is not None:
+        logger.info(f'Linguistic features: empty nodes {ling_stats["empty_nodes"]}, '
+                    f'with resolved enhanced-deps parent {ling_stats["empty_nodes_with_parent"]}')
+        unknown = {k: v for k, v in ling_stats.items() if not k.startswith('empty_nodes')}
+        logger.info(f'Linguistic features: values outside the encoded tag sets (left as zeros): {unknown}')
 
 
 def minimize_language(args):
