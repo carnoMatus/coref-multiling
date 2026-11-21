@@ -6,6 +6,7 @@ __pycache__
 data
 results
 .claude
+support-data/
 experiment-runbooks/
 experiment-results/
 models/
@@ -14,4 +15,3 @@ corefud-scorer/
 CLAUDE.local.md
 extra_docs/
 .nfs*
-support-data/
